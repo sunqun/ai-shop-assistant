@@ -1,24 +1,273 @@
-import Link from "next/link";
+"use client";
 
-const products = ["智能办公套装", "家庭影音设备", "轻量旅行装备"];
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AssistantDock } from "@/components/assistant-dock";
+import { products, type Product } from "@/lib/products";
+
+const PAGE_SIZE = 20;
+const categories = [
+  "全部商品",
+  ...Array.from(new Set(products.map((product) => product.category))),
+];
+const categoryTone: Record<string, string> = {
+  "全部商品": "all",
+  "办公数码": "office",
+  "影音娱乐": "media",
+  "户外旅行": "travel",
+  "厨房家电": "kitchen",
+  "家居生活": "home",
+  "运动健康": "fitness",
+};
+
+type PromotionRule = {
+  id: string;
+  label: string;
+  status: "configured" | "needs_human_review";
+};
+
+function addToCart(product: Product) {
+  let current: Array<{ id: string; quantity: number; sku?: string }> = [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem("ai-shop-cart") || "[]");
+    if (Array.isArray(parsed)) current = parsed;
+  } catch {
+    current = [];
+  }
+  const existing = current.find((item) => item.id === product.id);
+  if (existing) existing.quantity = Math.min(existing.quantity + 1, product.stock);
+  else current.push({ id: product.id, quantity: 1, sku: product.specs[0] });
+  window.localStorage.setItem("ai-shop-cart", JSON.stringify(current));
+  window.dispatchEvent(new CustomEvent("cart-updated"));
+}
 
 export default function HomePage() {
-  return <>
-    <section className="hero">
-      <div className="hero__main">
-        <p className="eyebrow">AI powered shopping</p>
-        <h1>先逛商城，再让 AI 帮你做选择。</h1>
-        <p>这是 AI 商城的 Next.js 页面骨架。商品、购物车、账户和 AI 助手入口已经准备好，业务功能将在后续模块逐步接入。</p>
-        <Link className="button button--primary" href="/products">开始逛商品</Link>
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("全部商品");
+  const [sort, setSort] = useState("recommended");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [addedId, setAddedId] = useState<string | null>(null);
+  const [promotionRules, setPromotionRules] = useState<PromotionRule[]>([]);
+  const [promotionState, setPromotionState] = useState<"loading" | "ready" | "error">("loading");
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/store-config", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("store config request failed");
+        return response.json() as Promise<{ promotionRules?: PromotionRule[] }>;
+      })
+      .then((config) => {
+        if (!active) return;
+        setPromotionRules(Array.isArray(config.promotionRules) ? config.promotionRules : []);
+        setPromotionState("ready");
+      })
+      .catch(() => {
+        if (active) setPromotionState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    const result = products.filter((product) => {
+      const matchesCategory = category === "全部商品" || product.category === category;
+      const matchesQuery =
+        !normalized ||
+        `${product.name} ${product.description} ${product.category}`
+          .toLowerCase()
+          .includes(normalized);
+      return matchesCategory && matchesQuery;
+    });
+    if (sort === "price-low") return [...result].sort((a, b) => a.price - b.price);
+    if (sort === "price-high") return [...result].sort((a, b) => b.price - a.price);
+    if (sort === "rating") return [...result].sort((a, b) => b.rating - a.rating);
+    return result;
+  }, [category, query, sort]);
+
+  useEffect(() => setVisibleCount(PAGE_SIZE), [category, query, sort]);
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting)
+          setVisibleCount((count) => Math.min(count + PAGE_SIZE, filteredProducts.length));
+      },
+      { rootMargin: "240px" }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [filteredProducts.length]);
+
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
+  function handleAdd(product: Product) {
+    if (!product.stock) return;
+    addToCart(product);
+    setAddedId(product.id);
+    window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1800);
+  }
+
+  return (
+    <div className="shop-home">
+      <div className="shop-home__content">
+        <div className="promo-strip" role="status" aria-live="polite">
+          <span className="promo-strip__dot" aria-hidden="true" />
+          <div className="promo-strip__content">
+            <strong>优惠规则</strong>
+            {promotionState === "loading" ? <span>正在读取最新配置...</span> : null}
+            {promotionState === "error" ? <span>优惠规则暂时无法加载，请稍后重试。</span> : null}
+            {promotionState === "ready" && promotionRules.length ? (
+              <div className="promo-strip__rules">
+                {promotionRules.map((rule) => (
+                  <span className="promo-rule" key={rule.id}>
+                    {rule.label}
+                    {rule.status === "needs_human_review" ? <em>待确认结算口径</em> : null}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="shop-toolbar">
+          <label className="shop-search">
+            <span className="sr-only">搜索商品</span>
+            <span aria-hidden="true">⌕</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索商品名称、品类或关键词"
+            />
+          </label>
+          <button
+            className="clear-filter clear-filter--toolbar"
+            type="button"
+            onClick={() => {
+              setCategory("全部商品");
+              setQuery("");
+              setSort("recommended");
+            }}
+          >
+            清除筛选
+          </button>
+        </div>
+        <div className="shop-body">
+          <aside className="shop-filters" aria-label="商品筛选">
+            <div className="shop-filter-group">
+              <span className="shop-filter-label">品类</span>
+              {categories.map((item) => (
+                <button
+                  key={item}
+                  className={category === item ? "shop-filter is-active" : "shop-filter"}
+                  type="button"
+                  onClick={() => setCategory(item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </aside>
+          <div className="shop-results">
+            <div className="results-header">
+              <span>商品列表</span>
+              <label className="shop-sort">
+                <span className="sr-only">排序</span>
+                <select value={sort} onChange={(event) => setSort(event.target.value)}>
+                  <option value="recommended">推荐排序</option>
+                  <option value="rating">评分优先</option>
+                  <option value="price-low">价格由低到高</option>
+                  <option value="price-high">价格由高到低</option>
+                </select>
+              </label>
+            </div>
+            {visibleProducts.length ? (
+              <div className="product-grid">
+                {visibleProducts.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    added={addedId === product.id}
+                    onAdd={handleAdd}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h2>没有找到匹配商品</h2>
+                <p>尝试调整关键词或清除筛选条件。</p>
+                <button
+                  className="button button--soft"
+                  type="button"
+                  onClick={() => {
+                    setCategory("全部商品");
+                    setQuery("");
+                  }}
+                >
+                  清除筛选
+                </button>
+              </div>
+            )}
+            <div ref={loadMoreRef} className="load-more" aria-live="polite">
+              {visibleProducts.length < filteredProducts.length ? "继续下拉加载更多" : ""}
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="hero__side">
-        <div><h2>首期实现链路</h2><p>首页 → 商品列表 → 商品详情 → 加入购物车 → 查看购物车</p></div>
-        <div className="notice">优惠弹窗、登录授权和订单功能当前仅保留页面入口。</div>
+      <AssistantDock embedded />
+    </div>
+  );
+}
+
+function ProductCard({
+  product,
+  added,
+  onAdd,
+}: {
+  product: Product;
+  added: boolean;
+  onAdd: (product: Product) => void;
+}) {
+  return (
+    <article className="product-tile">
+      <div className="product-tile__body">
+        <div className="product-tile__title-row">
+          <h2 className="product-tile__name" title={product.name}>
+            <Link href={`/products/${product.id}`} title={product.name}>
+              {product.name}
+            </Link>
+            <span className={`category-badge category-badge--${categoryTone[product.category] || "all"}`}>
+              {product.category}
+            </span>
+          </h2>
+          <span className="rating">★ {product.rating}</span>
+        </div>
+        <p>{product.description}</p>
+        <div className="product-tile__specs">
+          {product.specs.slice(0, 2).map((spec) => (
+            <span key={spec}>{spec}</span>
+          ))}
+        </div>
+        <div className="product-tile__footer">
+          <div>
+            <strong className="price">NT${product.price.toLocaleString()}</strong>
+            <del>NT${product.originalPrice.toLocaleString()}</del>
+            <span className={product.stock ? "stock stock--in" : "stock stock--out"}>
+              {product.stock ? `有货 · ${product.delivery}` : "暂时缺货"}
+            </span>
+          </div>
+          <button
+            className={added ? "button button--added" : "button button--primary"}
+            type="button"
+            disabled={!product.stock}
+            onClick={() => onAdd(product)}
+          >
+            {added ? "已加入" : "加入购物车"}
+          </button>
+        </div>
       </div>
-    </section>
-    <section className="section">
-      <div className="section__heading"><h2>推荐商品</h2><Link className="muted" href="/products">查看全部 →</Link></div>
-      <div className="grid">{products.map((product, index) => <article className="card product-card" key={product}><div className="product-card__image">0{index + 1}</div><div className="product-card__body"><h3>{product}</h3><p>商品卡片占位，后续接入商品服务和真实库存。</p><div className="product-card__footer"><span className="price">¥ --</span><Link className="button button--soft" href={`/products/demo-${index + 1}`}>查看详情</Link></div></div></article>)}</div>
-    </section>
-  </>;
+    </article>
+  );
 }
