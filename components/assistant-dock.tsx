@@ -1,9 +1,16 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { reconcileAiCart, quoteAiCart, submitAiOrder } from "@/lib/ai-cart-client";
 import { addToCartAndPersist } from "@/lib/cart-client";
+import { useOptionalAuth } from "@/components/auth-provider";
+import {
+  createPaymentLink,
+  deletePaymentLink,
+  listPaymentLinks,
+  type PaymentLinkView,
+} from "@/lib/payment-link-client";
 import { showToast } from "@/lib/toast";
 
 type AgentProduct = {
@@ -44,6 +51,9 @@ function formatMinor(value: number) {
 }
 
 export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
+  const router = useRouter();
+  const auth = useOptionalAuth();
+  const user = auth?.user ?? null;
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [products, setProducts] = useState<AgentProduct[]>([]);
@@ -67,6 +77,70 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
   const [detailProduct, setDetailProduct] = useState<AgentProduct | null>(null);
   const [detailReviews, setDetailReviews] = useState<AgentReview[]>([]);
   const [detailState, setDetailState] = useState<"loading" | "ready" | "error">("loading");
+  const [paymentLinks, setPaymentLinks] = useState<PaymentLinkView[]>([]);
+  const [creatingPaymentLinkId, setCreatingPaymentLinkId] = useState<string | null>(null);
+  const [deletingPaymentLinkId, setDeletingPaymentLinkId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setPaymentLinks([]);
+      return;
+    }
+    let cancelled = false;
+    void listPaymentLinks()
+      .then((links) => {
+        if (!cancelled) setPaymentLinks(links);
+      })
+      .catch(() => {
+        if (!cancelled) setPaymentLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  function paymentLinkUrl(link: PaymentLinkView) {
+    return `${window.location.origin}/handoff/${encodeURIComponent(link.urlToken)}`;
+  }
+
+  async function createPaymentLinkForProduct(product: AgentProduct) {
+    if (!product.stock) {
+      showToast("该商品暂时缺货。", "info");
+      return;
+    }
+    setCreatingPaymentLinkId(product.id);
+    try {
+      const link = await createPaymentLink(product.id, aiQuantity);
+      setPaymentLinks((current) => [link, ...current.filter((item) => item.linkId !== link.linkId)]);
+      showToast("支付短链已生成。", "success");
+    } catch {
+      showToast("支付短链生成失败，请稍后重试。");
+    } finally {
+      setCreatingPaymentLinkId(null);
+    }
+  }
+
+  async function removePaymentLink(link: PaymentLinkView) {
+    setDeletingPaymentLinkId(link.linkId);
+    try {
+      await deletePaymentLink(link.linkId);
+      setPaymentLinks((current) => current.filter((item) => item.linkId !== link.linkId));
+      showToast("支付短链已删除。", "success");
+    } catch {
+      showToast("支付短链删除失败，请稍后重试。");
+    } finally {
+      setDeletingPaymentLinkId(null);
+    }
+  }
+
+  async function copyPaymentLink(link: PaymentLinkView) {
+    try {
+      await navigator.clipboard.writeText(paymentLinkUrl(link));
+      showToast("支付短链已复制。", "success");
+    } catch {
+      showToast("复制失败，请手动复制链接。", "info");
+    }
+  }
 
   async function searchProducts(searchQuery: string, cursor?: string) {
     const normalizedQuery = searchQuery.trim();
@@ -189,7 +263,38 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
   }
 
   return (
-    <>
+    <div className={`assistant-column${paymentLinks.length ? " assistant-column--with-links" : ""}`}>
+      {paymentLinks.length ? (
+        <section className="assistant-payment-links assistant-payment-links--above" aria-label="支付短链">
+          <div className="assistant-payment-links__header">
+            <strong>支付短链</strong>
+          </div>
+          <div className="assistant-payment-links__list">
+            {paymentLinks.map((link) => (
+              <article className="assistant-payment-link" key={link.linkId}>
+                <div className="assistant-payment-link__summary">
+                  <strong>{link.product.name}</strong>
+                  <span>数量 {link.quantity} · {link.username}</span>
+                </div>
+                <div className="assistant-payment-link__url" title={paymentLinkUrl(link)}>
+                  {paymentLinkUrl(link)}
+                </div>
+                <div className="assistant-payment-link__actions">
+                  <button className="assistant-text-link" type="button" onClick={() => void copyPaymentLink(link)}>
+                    复制
+                  </button>
+                  <button className="assistant-text-link" type="button" onClick={() => window.open(paymentLinkUrl(link), "_blank", "noopener,noreferrer")}>
+                    打开
+                  </button>
+                  <button className="assistant-text-link assistant-text-link--danger" type="button" disabled={deletingPaymentLinkId === link.linkId} onClick={() => void removePaymentLink(link)}>
+                    {deletingPaymentLinkId === link.linkId ? "删除中..." : "删除"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <aside
         className={`assistant-dock${embedded ? " assistant-dock--embedded" : ""}`}
         aria-label="AI 购物助手"
@@ -319,6 +424,14 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
                       disabled={!product.stock || payingProductId !== null}
                     >
                       {payingProductId === product.id ? "处理中..." : "付款"}
+                    </button>
+                    <button
+                      type="button"
+                      className="assistant-text-link"
+                      onClick={() => void createPaymentLinkForProduct(product)}
+                      disabled={!product.stock || creatingPaymentLinkId !== null}
+                    >
+                      {creatingPaymentLinkId === product.id ? "生成中..." : "生成支付短链"}
                     </button>
                   </span>
                 </span>
@@ -461,13 +574,16 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
               </div>
               <p className="assistant-detail__meta">订单编号：{orderReceipt.orderGroupId}</p>
               <div className="assistant-result__actions">
-                <Link
+                <button
                   className="button button--soft"
-                  href="/account/orders"
-                  onClick={() => setOrderReceipt(null)}
+                  type="button"
+                  onClick={() => {
+                    setOrderReceipt(null);
+                    router.push("/account/orders");
+                  }}
                 >
                   查看订单
-                </Link>
+                </button>
                 <button
                   className="button button--ghost"
                   type="button"
@@ -480,6 +596,6 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
           </div>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

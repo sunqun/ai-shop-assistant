@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
@@ -277,15 +277,23 @@ function ProductCard({
   adding: boolean;
   onAdd: (product: CatalogProduct) => void | Promise<void>;
 }) {
+  const router = useRouter();
   const specs = Object.entries(product.specs);
   return (
     <article className={`product-tile${added ? " product-tile--added" : ""}`}>
       <div className="product-tile__body">
         <div className="product-tile__title-row">
           <h2 className="product-tile__name" title={product.name}>
-            <Link href={`/products/detail?productId=${encodeURIComponent(product.id)}`} title={product.name}>
+            <a
+              href={`/products/detail?productId=${encodeURIComponent(product.id)}`}
+              title={product.name}
+              onClick={(event) => {
+                event.preventDefault();
+                router.push(`/products/detail?productId=${encodeURIComponent(product.id)}`);
+              }}
+            >
               {product.name}
-            </Link>
+            </a>
             <span className={`category-badge category-badge--${product.tone || "all"}`}>
               {product.category}
             </span>

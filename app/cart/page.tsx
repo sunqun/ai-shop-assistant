@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PlaceholderCard } from "@/components/page-shell";
 import { useAuth } from "@/components/auth-provider";
 import type { CatalogProduct } from "@/lib/catalog";
+import { lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCartToken, quoteCart, reconcileCart } from "@/lib/cart-client";
 import { readApiResponse } from "@/lib/auth-retry";
 import { showToast } from "@/lib/toast";
@@ -53,11 +54,11 @@ export default function CartPage() {
   const [cartVersion, setCartVersion] = useState<number | null>(null);
   const [quoteState, setQuoteState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [quote, setQuote] = useState<QuoteView | null>(null);
-  const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
   const [catalog, setCatalog] = useState<Map<string, CatalogProduct>>(new Map());
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [selection, setSelection] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let active = true;
@@ -95,8 +96,13 @@ export default function CartPage() {
     return () => window.removeEventListener("cart-updated", refresh);
   }, []);
 
+  const selectedItems = useMemo(
+    () => items.filter((item) => selection[item.id] !== false),
+    [items, selection]
+  );
+
   useEffect(() => {
-    if (!items.length) {
+    if (!selectedItems.length) {
       setInventoryState("idle");
       setAllocations({});
       setCartVersion(null);
@@ -106,7 +112,7 @@ export default function CartPage() {
     }
     let active = true;
     setInventoryState("loading");
-    reconcileCart(items)
+    reconcileCart(selectedItems)
       .then((result) => {
         if (!active) return;
         const nextAllocations: Record<
@@ -130,12 +136,11 @@ export default function CartPage() {
     return () => {
       active = false;
     };
-  }, [items]);
+  }, [selectedItems]);
 
   useEffect(() => {
     if (cartVersion === null) return;
     let active = true;
-    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     setQuoteState("loading");
     quoteCart(cartVersion)
       .then((result) => {
@@ -156,14 +161,6 @@ export default function CartPage() {
         }
         setQuote(value as QuoteView);
         setQuoteState("ready");
-        expiryTimer = setTimeout(
-          () => {
-            if (!active) return;
-            setQuote(null);
-            setQuoteState("error");
-          },
-          Math.max(0, Date.parse(value.expiresAt) - Date.now())
-        );
       })
       .catch(() => {
         if (!active) return;
@@ -173,9 +170,8 @@ export default function CartPage() {
       });
     return () => {
       active = false;
-      if (expiryTimer) clearTimeout(expiryTimer);
     };
-  }, [cartVersion, quoteRefreshKey]);
+  }, [cartVersion]);
 
   const rows = useMemo(
     () =>
@@ -190,6 +186,10 @@ export default function CartPage() {
     setItems(next);
     window.localStorage.setItem(CART_KEY, JSON.stringify(next));
     window.dispatchEvent(new CustomEvent("cart-updated"));
+  }
+
+  function toggleSelection(id: string, checked: boolean) {
+    setSelection((current) => ({ ...current, [id]: checked }));
   }
 
   async function createOrder() {
@@ -242,6 +242,14 @@ export default function CartPage() {
         <section className="cart-list" aria-label="购物车商品">
           {rows.map(({ item, product }) => (
             <article className="cart-row" key={item.id}>
+              <label className="cart-select">
+                <span className="sr-only">选择 {product!.name}</span>
+                <input
+                  type="checkbox"
+                  checked={selection[item.id] !== false}
+                  onChange={(event) => toggleSelection(item.id, event.target.checked)}
+                />
+              </label>
               <div className="cart-row__visual" aria-hidden="true">
                 {product!.name.slice(0, 1)}
               </div>
@@ -250,7 +258,7 @@ export default function CartPage() {
                 <span className="price">NT${product!.price.toLocaleString()}</span>
                 {allocations[item.id]?.unavailableQuantity ? (
                   <span className="stock stock--out">
-                    缺货 {allocations[item.id].unavailableQuantity} 件，已锁定{" "}
+                    缺货 {allocations[item.id].unavailableQuantity} 件，已锁定
                     {allocations[item.id].allocatedQuantity} 件
                   </span>
                 ) : allocations[item.id] ? (
@@ -279,7 +287,7 @@ export default function CartPage() {
               </label>
               <strong>
                 {allocations[item.id]
-                  ? `NT$${(product!.price * allocations[item.id].allocatedQuantity).toLocaleString()}`
+                  ? formatMinor(lineSubtotalMinor(product!.price, allocations[item.id].allocatedQuantity))
                   : "库存确认后计算"}
               </strong>
               <button
@@ -321,15 +329,6 @@ export default function CartPage() {
               <span>{inventoryState === "ready" ? "等待报价" : "结账前确认"}</span>
             </div>
           )}
-          {inventoryState === "ready" && quoteState === "error" ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => setQuoteRefreshKey((value) => value + 1)}
-            >
-              重新报价
-            </button>
-          ) : null}
           {!authLoading && !user ? (
             <>
               <p className="muted">请登录后付款。</p>
@@ -344,7 +343,7 @@ export default function CartPage() {
           <button
             className="button button--primary"
             type="button"
-            disabled={quoteState !== "ready" || !user?.isAuthorized || submitting}
+            disabled={quoteState !== "ready" || !user?.isAuthorized || submitting || selectedItems.length === 0}
             onClick={createOrder}
           >
             {submitting ? "正在创建订单…" : "付款"}

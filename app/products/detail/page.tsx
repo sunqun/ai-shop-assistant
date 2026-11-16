@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import type { CatalogProduct, CatalogReview } from "@/lib/catalog";
@@ -27,6 +27,7 @@ export default function ProductDetailPage({
   searchParams: Promise<{ productId?: string }>;
 }) {
   const { productId } = use(searchParams);
+  const router = useRouter();
   const [product, setProduct] = useState<CatalogProduct | null>(null);
   const [reviews, setReviews] = useState<CatalogReview[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "notfound" | "error">("loading");
@@ -94,9 +95,9 @@ export default function ProductDetailPage({
       <PageShell eyebrow="商品详情" title="商品不存在">
         <div className="empty-state">
           <p>这件商品可能已下架或链接已失效。</p>
-          <Link className="button button--primary" href="/">
+          <button className="button button--primary" type="button" onClick={() => router.push("/")}>
             返回商品列表
-          </Link>
+          </button>
         </div>
       </PageShell>
     );
@@ -107,9 +108,9 @@ export default function ProductDetailPage({
       <PageShell eyebrow="商品详情" title="加载失败">
         <div className="empty-state">
           <p>商品信息暂时无法加载，请稍后重试。</p>
-          <Link className="button button--primary" href="/">
+          <button className="button button--primary" type="button" onClick={() => router.push("/")}>
             返回商品列表
-          </Link>
+          </button>
         </div>
       </PageShell>
     );

@@ -3,6 +3,7 @@ import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/prom
 import { getDbPool } from "@/lib/db";
 import { deriveCartId } from "@/lib/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
+import { lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
 import type { AiOrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
 
 export class OrderServiceError extends Error {
@@ -270,8 +271,7 @@ export async function submitWebOrder(input: {
         throw new OrderServiceError("PRICING_CATALOG_UNAVAILABLE");
     const currentSubtotalMinor = itemRows.reduce(
       (sum, item) =>
-        sum +
-        Math.trunc(products.get(item.product_id)!.price * 100) * Number(item.allocated_quantity),
+        sum + lineSubtotalMinor(products.get(item.product_id)!.price, Number(item.allocated_quantity)),
       0
     );
     if (currentSubtotalMinor !== Number(quote.subtotal_minor))
@@ -294,7 +294,7 @@ export async function submitWebOrder(input: {
           orderId,
           item.sku_id,
           item.allocated_quantity,
-          Math.trunc(products.get(item.product_id)!.price * 100),
+          toMinor(products.get(item.product_id)!.price),
         ]
       );
     const response: WebOrderToolOutput = {
@@ -420,8 +420,7 @@ export async function submitAiOrder(input: {
         throw new OrderServiceError("PRICING_CATALOG_UNAVAILABLE");
     const currentSubtotalMinor = itemRows.reduce(
       (sum, item) =>
-        sum +
-        Math.trunc(products.get(item.product_id)!.price * 100) * Number(item.allocated_quantity),
+        sum + lineSubtotalMinor(products.get(item.product_id)!.price, Number(item.allocated_quantity)),
       0
     );
     if (currentSubtotalMinor !== Number(quote.subtotal_minor))
@@ -444,7 +443,7 @@ export async function submitAiOrder(input: {
           orderId,
           item.sku_id,
           item.allocated_quantity,
-          Math.trunc(products.get(item.product_id)!.price * 100),
+          toMinor(products.get(item.product_id)!.price),
         ]
       );
     const response: AiOrderToolOutput = {

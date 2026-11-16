@@ -12,6 +12,10 @@ vi.mock("@/lib/ai-cart-client", () => ({
   submitAiOrder: vi.fn(async () => ({ orderGroupId: "order" })),
 }));
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 import { AssistantDock } from "@/components/assistant-dock";
 
 const product = {

@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { PageShell } from "@/components/page-shell";
 import { useAuth } from "@/components/auth-provider";
 import { showToast } from "@/lib/toast";
 
 export default function AccountPage() {
+  const router = useRouter();
   const { user, loading, openLogin, authorize } = useAuth();
   const [saving, setSaving] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -63,9 +63,17 @@ export default function AccountPage() {
       </section>
       <div className="section route-map">
         {[["订单记录", "/account/orders"]].map(([label, href]) => (
-          <Link className="route-link" href={href} key={href}>
+          <a
+            className="route-link"
+            href={href}
+            key={href}
+            onClick={(event) => {
+              event.preventDefault();
+              router.push(href);
+            }}
+          >
             {label} →
-          </Link>
+          </a>
         ))}
       </div>
     </div>

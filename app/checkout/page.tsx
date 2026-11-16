@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { PageShell, PlaceholderCard } from "@/components/page-shell";
 import { useAuth } from "@/components/auth-provider";
 import { getProduct } from "@/lib/products";
+import { lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCartToken, readLocalCart, reconcileCart, quoteCart } from "@/lib/cart-client";
 import { readApiResponse } from "@/lib/auth-retry";
 import { showToast } from "@/lib/toast";
@@ -138,7 +138,7 @@ export default function CheckoutPage() {
                   规格：{item.sku || product!.specs[0]} · 数量：{item.quantity}
                 </p>
               </div>
-              <strong>{money(Math.round(product!.price * 100) * item.quantity)}</strong>
+              <strong>{money(lineSubtotalMinor(product!.price, item.quantity))}</strong>
             </div>
           ))}
           <p className="notice">提交后会创建订单并扣减本次已锁定的库存；真实支付尚未接入。</p>
@@ -197,9 +197,9 @@ export default function CheckoutPage() {
           >
             {submitting ? "正在创建订单并扣减库存…" : "付款"}
           </button>
-          <Link className="button button--ghost" href="/cart">
+          <button className="button button--ghost" type="button" onClick={() => router.push("/cart")}>
             返回购物车
-          </Link>
+          </button>
         </aside>
       </div>
     </PageShell>

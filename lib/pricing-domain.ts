@@ -2,6 +2,16 @@ export type AppliedPromotion = "A+B" | "B" | "A+B+C" | "B+C";
 export type PricingCandidate = { id: AppliedPromotion; discountMinor: number; shippingMinor: number; totalMinor: number; label: string };
 export type PricingInput = { subtotalMinor: number; source: "WEB" | "AI"; aiSubtotalMinor?: number };
 
+export function toMinor(price: number): number {
+  // 统一“元 → 最小货币单位（分）”的舍入口径：四舍五入到分，避免各处使用不同取整方式造成 1 分误差。
+  return Math.round(price * 100);
+}
+
+export function lineSubtotalMinor(price: number, quantity: number): number {
+  // 商品行小计 = 单价(分) × 数量，与报价小计共用同一份实现。
+  return toMinor(price) * quantity;
+}
+
 export function calculateBestQuote(input: PricingInput): { selected: PricingCandidate; candidates: PricingCandidate[]; appliedRules: string[]; ruleVersion: string } {
   const subtotal = input.subtotalMinor;
   const aiSubtotal = input.aiSubtotalMinor ?? 0;

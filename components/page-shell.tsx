@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
 
 type PageShellProps = {
   eyebrow?: string;
@@ -8,6 +10,7 @@ type PageShellProps = {
 };
 
 export function PageShell({ eyebrow, title, description, children }: PageShellProps) {
+  const router = useRouter();
   return (
     <div>
       <div className="page-heading">
@@ -16,9 +19,9 @@ export function PageShell({ eyebrow, title, description, children }: PageShellPr
           <h1>{title}</h1>
           {description ? <p>{description}</p> : null}
         </div>
-        <Link className="button button--ghost" href="/">
+        <button className="button button--ghost" type="button" onClick={() => router.push("/")}>
           返回首页
-        </Link>
+        </button>
       </div>
       {children}
     </div>
@@ -36,13 +39,14 @@ export function PlaceholderCard({
   actionHref?: string;
   actionLabel?: string;
 }) {
+  const router = useRouter();
   return (
     <div className="empty-state">
       <h2>{title}</h2>
       <p>{description}</p>
-      <Link className="button button--soft" href={actionHref}>
+      <button className="button button--soft" type="button" onClick={() => router.push(actionHref)}>
         {actionLabel}
-      </Link>
+      </button>
     </div>
   );
 }

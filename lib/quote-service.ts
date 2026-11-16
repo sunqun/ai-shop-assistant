@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
 import { deriveCartId } from "@/lib/cart-session";
 import { getDbPool } from "@/lib/db";
-import { calculateBestQuote } from "@/lib/pricing-domain";
+import { calculateBestQuote, lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCatalogProducts } from "@/lib/catalog";
 import type { AiQuoteToolOutput } from "@/lib/mcp/types";
 
@@ -41,7 +41,7 @@ export async function quoteCart(input: { userid: string; cartToken: string; cart
       if (item.reservation_status !== "ACTIVE" || Number(item.reserved_quantity) !== Number(item.allocated_quantity) || !reservationExpiresAt || reservationExpiresAt.getTime() <= Date.now()) throw new QuoteServiceError("CART_RESERVATION_EXPIRED");
       const product = products.get(item.product_id);
       if (!product) throw new QuoteServiceError("PRICING_CATALOG_UNAVAILABLE");
-      subtotalMinor += Math.trunc(product.price * 100) * Number(item.allocated_quantity);
+      subtotalMinor += lineSubtotalMinor(product.price, Number(item.allocated_quantity));
     }
     const quote = calculateBestQuote({ subtotalMinor, source: cart.source, aiSubtotalMinor: cart.source === "AI" ? subtotalMinor : 0 });
     const quoteExpiresAt = new Date(Math.min(Date.now() + 15 * 60 * 1000, cartExpiresAt.getTime()));

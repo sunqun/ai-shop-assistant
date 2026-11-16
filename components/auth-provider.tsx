@@ -161,6 +161,10 @@ export function useAuth(): AuthContextValue {
   return value;
 }
 
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}
+
 export function LoginButton() {
   const { user, loading, openLogin, logout } = useAuth();
   if (loading) return <span className="muted">加载中…</span>;
@@ -190,7 +194,7 @@ function LoginDialog() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [consent, setConsent] = useState(false);
+  const [consent, setConsent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -199,7 +203,7 @@ function LoginDialog() {
       setUsername("");
       setPassword("");
       setConfirmPassword("");
-      setConsent(false);
+      setConsent(true);
       setSubmitting(false);
     }
   }, [loginOpen]);
