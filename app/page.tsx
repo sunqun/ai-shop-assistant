@@ -3,21 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDock } from "@/components/assistant-dock";
-import { products, type Product } from "@/lib/products";
+import type { CatalogProduct } from "@/lib/catalog";
 
 const PAGE_SIZE = 20;
-const categories = [
-  "全部商品",
-  ...Array.from(new Set(products.map((product) => product.category))),
-];
 const categoryTone: Record<string, string> = {
   "全部商品": "all",
-  "办公数码": "office",
-  "影音娱乐": "media",
-  "户外旅行": "travel",
-  "厨房家电": "kitchen",
-  "家居生活": "home",
-  "运动健康": "fitness",
+  "3C 配件": "office",
+  "居家生活": "home",
+  "美妝保養": "media",
+  "運動戶外": "fitness",
+  "食品飲料": "kitchen",
 };
 
 type PromotionRule = {
@@ -26,7 +21,7 @@ type PromotionRule = {
   status: "configured" | "needs_human_review";
 };
 
-function addToCart(product: Product) {
+function addToCart(product: CatalogProduct) {
   let current: Array<{ id: string; quantity: number; sku?: string }> = [];
   try {
     const parsed = JSON.parse(window.localStorage.getItem("ai-shop-cart") || "[]");
@@ -37,13 +32,15 @@ function addToCart(product: Product) {
   const existing = current.find((item) => item.id === product.id);
   const reachedLimit = existing ? existing.quantity >= product.stock : false;
   if (existing) existing.quantity = Math.min(existing.quantity + 1, product.stock);
-  else current.push({ id: product.id, quantity: 1, sku: product.specs[0] });
+  else current.push({ id: product.id, quantity: 1, sku: Object.keys(product.specs)[0] });
   window.localStorage.setItem("ai-shop-cart", JSON.stringify(current));
   window.dispatchEvent(new CustomEvent("cart-updated"));
   return !reachedLimit;
 }
 
 export default function HomePage() {
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [productsState, setProductsState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部商品");
   const [sort, setSort] = useState("recommended");
@@ -52,6 +49,7 @@ export default function HomePage() {
   const [addMessage, setAddMessage] = useState("");
   const [promotionRules, setPromotionRules] = useState<PromotionRule[]>([]);
   const [promotionState, setPromotionState] = useState<"loading" | "ready" | "error">("loading");
+  const [reload, setReload] = useState(0);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,13 +72,39 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    setProductsState("loading");
+    fetch("/api/v1/products", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("products request failed");
+        return response.json() as Promise<{ products?: CatalogProduct[] }>;
+      })
+      .then((data) => {
+        if (!active) return;
+        setProducts(Array.isArray(data.products) ? data.products : []);
+        setProductsState("ready");
+      })
+      .catch(() => {
+        if (active) setProductsState("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [reload]);
+
+  const categories = useMemo(
+    () => ["全部商品", ...Array.from(new Set(products.map((product) => product.category)))],
+    [products]
+  );
+
   const filteredProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const result = products.filter((product) => {
       const matchesCategory = category === "全部商品" || product.category === category;
       const matchesQuery =
         !normalized ||
-        `${product.name} ${product.description} ${product.category}`
+        `${product.name} ${product.brand} ${product.description} ${product.category}`
           .toLowerCase()
           .includes(normalized);
       return matchesCategory && matchesQuery;
@@ -89,7 +113,7 @@ export default function HomePage() {
     if (sort === "price-high") return [...result].sort((a, b) => b.price - a.price);
     if (sort === "rating") return [...result].sort((a, b) => b.rating - a.rating);
     return result;
-  }, [category, query, sort]);
+  }, [products, category, query, sort]);
 
   useEffect(() => setVisibleCount(PAGE_SIZE), [category, query, sort]);
   useEffect(() => {
@@ -107,7 +131,7 @@ export default function HomePage() {
   }, [filteredProducts.length]);
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
-  function handleAdd(product: Product) {
+  function handleAdd(product: CatalogProduct) {
     if (!product.stock) return;
     const added = addToCart(product);
     setAddedId(product.id);
@@ -188,7 +212,23 @@ export default function HomePage() {
                 </select>
               </label>
             </div>
-            {visibleProducts.length ? (
+            {productsState === "loading" ? (
+              <div className="empty-state">
+                <h2>正在加载商品...</h2>
+              </div>
+            ) : productsState === "error" ? (
+              <div className="empty-state">
+                <h2>商品暂时无法加载</h2>
+                <p>请稍后重试。</p>
+                <button
+                  className="button button--soft"
+                  type="button"
+                  onClick={() => setReload((count) => count + 1)}
+                >
+                  重新加载
+                </button>
+              </div>
+            ) : visibleProducts.length ? (
               <div className="product-grid">
                 {visibleProducts.map((product) => (
                   <ProductCard
@@ -216,7 +256,9 @@ export default function HomePage() {
               </div>
             )}
             <div ref={loadMoreRef} className="load-more" aria-live="polite">
-              {visibleProducts.length < filteredProducts.length ? "继续下拉加载更多" : ""}
+              {productsState === "ready" && visibleProducts.length < filteredProducts.length
+                ? "继续下拉加载更多"
+                : ""}
             </div>
           </div>
         </div>
@@ -231,10 +273,11 @@ function ProductCard({
   added,
   onAdd,
 }: {
-  product: Product;
+  product: CatalogProduct;
   added: boolean;
-  onAdd: (product: Product) => void;
+  onAdd: (product: CatalogProduct) => void;
 }) {
+  const specs = Object.entries(product.specs);
   return (
     <article className={`product-tile${added ? " product-tile--added" : ""}`}>
       <div className="product-tile__body">
@@ -247,20 +290,19 @@ function ProductCard({
               {product.category}
             </span>
           </h2>
-          <span className="rating">★ {product.rating}</span>
+          <span className="rating">{product.rating ? `★ ${product.rating}` : "暂无评分"}</span>
         </div>
         <p>{product.description}</p>
         <div className="product-tile__specs">
-          {product.specs.slice(0, 2).map((spec) => (
-            <span key={spec}>{spec}</span>
+          {specs.slice(0, 2).map(([key, value]) => (
+            <span key={key}>{key}: {value}</span>
           ))}
         </div>
         <div className="product-tile__footer">
           <div>
             <strong className="price">NT${product.price.toLocaleString()}</strong>
-            <del>NT${product.originalPrice.toLocaleString()}</del>
             <span className={product.stock ? "stock stock--in" : "stock stock--out"}>
-              {product.stock ? `有货 · ${product.delivery}` : "暂时缺货"}
+              {product.stock ? "有货" : "暂时缺货"}
             </span>
           </div>
           <button
