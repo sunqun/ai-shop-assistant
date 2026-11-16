@@ -2,13 +2,13 @@
 
 ## 1. 版本、技术栈与职责
 
-- 版本：`v0.8-assistant-top3-drawer`，更新时间：2026-11-16（Asia/Shanghai）；补充“我的”账户中心、订单/物流/退款入口及网页 AI 助手布局，落地 Next.js App Router 页面骨架，并将 TOP3 对比改为按钮 + 左侧浮动抽屉。
+- 版本：`v0.1.0`，更新时间：2026-11-16（Asia/Shanghai）；补充“我的”账户中心、订单/物流/退款入口及网页 AI 助手商品推荐 Agent 布局，落地 Next.js App Router 页面骨架。
 - 对齐 [需求功能清单](requirements-analysis.md) 的 D-01～D-09；业务方向已确认，Q-01～Q-08 的细则仍待确定。
 - Next.js 15 + React 19 + TypeScript，使用 App Router 管理页面路由、布局和动态参数；本项目以 Next.js 全栈应用骨架起步，后续 API Route/Server Action 可在同一仓库内按已确认后端契约实现。
 - TanStack Query 管理商品、登录用户、授权、购物车、报价、拆单、订单及退货的服务端状态。
 - Zustand 只管理助手面板和临时界面状态；React Hook Form + Zod 管理表单。授权、库存、支付结果不由本地状态裁决。
 - 样式建议使用 CSS Modules + 统一主题变量，优先复用可访问的 Dialog、Checkbox、Alert、Table 等组件，保证功能可用。
-- AI 助手作为 `AssistantDock` 独立于全站顶部导航；右侧展开宽度建议固定为 360px。首页 `/` 上助手占据页面位置（不浮动遮罩）且默认展开，收起后显示右下角可拖动卡通小精灵入口。面板使用 CSS transform/opacity 过渡，不依赖顶部搜索框。TOP3 对比不再常驻面板顶部，改为结果列表上方按钮，点击在页面左侧打开覆盖筛选栏的浮动抽屉（宽度 360~480px）。
+- AI 助手作为 `AssistantDock` 独立于全站顶部导航；右侧展开宽度建议固定为 360px。首页 `/` 上助手占据页面位置（不浮动遮罩）且默认展开，收起后显示右下角可拖动卡通小精灵入口。面板使用 CSS transform/opacity 过渡，不依赖顶部搜索框。
 - Vitest + Testing Library 验证交互；Playwright 覆盖登录授权、交接、拆单、收货及退货流程。本阶段仅设计，未实施这些测试。
 
 ## 2. 页面、路由与主要组件
@@ -28,7 +28,7 @@
 | `/orders/:orderGroupId`           | 履约、收货、扣款、退货状态                                                                                     | 同上                                                 |
 | `/orders/:orderGroupId/logistics` | 当前订单的子单、包裹和物流轨迹                                                                                 | 订单所有者或受限订单凭证                             |
 | `/orders/:orderGroupId/returns`   | 退货选择、退款/应收和运费预览                                                                                  | 资源级权限，敏感操作可要求额外验证                   |
-| 全站停靠组件                      | `AssistantDock`、`AssistantLauncher`、`ComparisonTrigger`、`ComparisonDrawer`、`ComparisonTop3`、`SearchResultList`、`AssistantComposer`、`LoginDialog` | 商品搜索公开；下单前由服务端读取用户授权字段         |
+| 全站停靠组件                      | `AssistantDock`、`AssistantLauncher`、`SearchResultList`、`ProductResultCard`、`AssistantComposer`、`LoginDialog` | 商品搜索公开；AI 下单由 M5/M6 服务端契约负责         |
 
 建议目录：`app/`（layout、page、loading、error、动态路由）、`features/{auth,promotion,catalog,cart,checkout,orders,returns}/`、`shared/{api,ui,types}/`。不在组件中重复实现优惠和库存算法。
 
@@ -83,7 +83,7 @@
 ┌────────────────────────────────────┬────────────────┐
 │ 导航与搜索             [登录][购物车] │ AI 助手  [收起]  │
 ├────────────────────────────────────┼────────────────┤
-│ 非阻塞优惠提示条（如展示，不遮挡）   │ [TOP3 对比(3)]  │
+│ 非阻塞优惠提示条（如展示，不遮挡）   │ Agent 商品结果   │
 │ 搜索关键词 [搜索]    已选条件/清除   │ (左抽屉看对比)  │
 ├────────────┬───────────────────────┼────────────────┤
 │ 筛选条件   │ 商品结果（下拉加载）    │ 搜索结果列表      │
@@ -234,7 +234,7 @@
 
 布局验收除第 8 节交互标准外，检查 1024/1280/1440px 代表桌面窗口宽度及 200% 浏览器缩放：无关键内容横向溢出，键盘可达全部操作，焦点不被吸顶区域挡住，商品/拆单/币种/费用始终可读。此处是设计验收计划，未生成高保真稿或执行浏览器验证。
 
-### 2.8 全站 AI 助手停靠面板布局
+### 2.8 全站 AI 助手商品推荐面板布局
 
 助手是独立于站点导航的右侧停靠面板。顶部站点可以保留商品目录搜索，但 AI 对话入口不放在顶部搜索框。展开宽度建议 360px，面板高度为可视区高度。
 
@@ -245,7 +245,7 @@
 ┌─────────────────────────────┬──────────────┐
 │ 页面导航/内容                │ 助手标题 [收起]│
 │ （为助手预留宽度，不遮罩）    ├──────────────┤
-│ 页面主内容                   │ [TOP3 对比(3)]│
+│ 页面主内容                   │ 相关商品结果     │
 │                             ├──────────────┤
 │                             │ 搜索结果列表   │
 │                             │ 仅此区域滚动   │
@@ -255,37 +255,18 @@
 └─────────────────────────────┴──────────────┘
                                                 ◉ 卡通小精灵
 
-点击 [TOP3 对比] 在页面左侧打开浮动抽屉（覆盖筛选栏）
-┌────────────┬──────────────────────────────┐
-│ TOP3 对比   │ 遮罩下的页面主内容             │
-│ [×]        │                               │
-│ 商品1/2/3   │                               │
-│ 价格/规格/库存│                               │
-│ 评分/优劣    │                               │
-└────────────┴──────────────────────────────┘
-
 ```
 
 - 首页 `/` 默认展开，`AssistantDock` 占据视口右侧固定宽度，主内容区预留该宽度，避免遮住商品操作；其他页面助手以右侧停靠形态出现。收起动画建议约 220ms，面板淡出并收敛为右下角 `AssistantLauncher`（卡通小精灵）。
 - 卡通小精灵入口建议 56×56px，默认距右、下各 16px。形象建议为圆润的卡通小精灵：大眼睛、柔和轮廓、品牌主色点缀，收起/悬停带轻微弹跳或眨眼动画，展开后隐藏。小精灵可拖动，松手后吸附最近边缘并夹在视口内，位置保存为本地界面偏好；提供恢复默认位置。键盘焦点下 Enter/Space 打开，Escape 收起。
 - 支持 `prefers-reduced-motion`；拖动使用 Pointer Events 和 pointer capture，不能仅以拖动作为唯一打开方式。
-- 面板头部展示助手名/状态和收起按钮。TOP3 对比按钮固定在头部下方（结果列表上方），无搜索结果时隐藏；点击后在页面左侧打开浮动抽屉 `ComparisonDrawer`（覆盖约 240px 筛选栏、宽度 360~480px），显示商品、到手价/优惠、核心规格、库存/配送、评分/评论量以及“优势/需要权衡”。抽屉支持遮罩点击、Escape 和右上角关闭按钮收起。
-- 中间结果区显示完整命中列表，独立 `overflow-y: auto` 并支持下拉加载（pageSize 默认 20、最大 100）；前三项和 TOP3 通过商品 ID 对齐。卡片提供打开详情和加入比较入口。
-- 底部 `AssistantComposer` 固定，多行输入有高度上限。发送、取消、重试状态原位反馈。
+- 面板头部展示助手名/状态和收起按钮。结果区统一展示服务端返回的相关商品列表，不提供比较按钮、比较抽屉或比较状态。
+- 结果区独立 `overflow-y: auto` 并支持下拉加载（pageSize 默认 20、最大 100）；商品卡提供打开详情入口，并展示商品名称、公开价格/价格摘要、规格摘要、库存状态、脱敏评论摘要/评论入口和 Agent 相关理由。
+- 底部 `AssistantComposer` 固定，当前实现使用单行输入框；发送、重试状态原位反馈，取消请求作为后续增强项。
 
-建议组件：`AssistantDock`、`AssistantHeader`、`ComparisonTrigger`、`ComparisonDrawer`、`ComparisonTop3`、`ComparisonProductCard`、`SearchResultList`、`AssistantComposer`、`AssistantLauncher`。面板展开、拖动坐标、抽屉开关属于 Zustand 界面状态；搜索结果和比较数据由 TanStack Query 缓存。不要把授权、库存或订单状态放进拖动状态。
+设计组件：`AssistantDock`、`AssistantHeader`、`ProductResultCard`、`SearchResultList`、`AssistantComposer`、`AssistantLauncher`。当前实现以 React 本地 state 管理助手交互，尚未接入 Zustand 或 TanStack Query；后续引入状态库时仍不得把推荐分数、毛利、内部权重或订单状态放进前端状态。
 
-优劣字段建议（均需可追溯至服务器数据）：
-
-| 对比项     | 展示内容                                                 | 边界                                             |
-| ---------- | -------------------------------------------------------- | ------------------------------------------------ |
-| 价格       | 当前标价；有报价上下文时显示到手价、优惠金额和规则说明   | 搜索阶段不虚构最终购物车报价，报价失效时标为估算 |
-| 核心规格   | 按品类配置的 3～5 项可比属性，如尺寸、容量、材质、兼容性 | 缺失显示“暂无数据”，同义且单位可归一时才横向比较 |
-| 库存与配送 | 可售/缺货；有可信数据时显示预计配送窗口                  | 搜索结果不是库存承诺，不编造到货日期             |
-| 评分与口碑 | 平均评分、评论数，可选脱敏评论摘要                       | 标注样本量；摘要需能追溯，不把评论推断成事实     |
-| 优势/权衡  | 每件 1～3 条结构化优势和待权衡点，标明依据字段           | 不使用毛利、隐藏排序权重或缺失字段推断           |
-
-建议首期实现价格、规格、库存和评分/评论量；配送时效和评论摘要依赖可信数据源再启用。品类没有共同属性时保留共同字段，并在单品卡展示差异属性。
+商品卡只渲染服务端允许公开的字段。缺失信息显示“暂无数据”，不由前端推断质量、配送承诺、库存承诺或价格；用户可打开商品详情查看规格与全部可展示评论。
 
 ## 3. 登录、首页与授权交互
 
@@ -360,7 +341,7 @@ flowchart TD
 - `SplitNotice` 持续展示拆分原因、已下单/待处理部分、费用和配送变化；AI 回执也返回同一提醒。
 - 可履约项才进入本次订单；缺货项保留可追踪状态。补货后是否自动下单未确定，不生成隐藏应收。
 - 提交按钮使用“确认下单，收货后扣款”；界面显示预计扣款总额、商品、规格、优惠及运费，移除“确认并支付”。
-- 前端只展示后端自动应用的 A/B 规则和金额，不在本地计算优惠、运费或折扣，也不提供优惠选择器；数量、来源资格（由服务端判定）、拆分结果或地址变化后，调用后端重新报价。M4 AI 自动建单来源才允许服务端叠加 C；当前 C 按最小货币单位使用 `Math.round`，页面统一按 NT$ 整数显示。
+- 前端只展示后端自动应用的 A/B 规则和金额，不在本地计算优惠、运费或折扣，也不提供优惠选择器；数量、来源资格（由服务端判定）、拆分结果或地址变化后，调用后端重新报价。AI 选品后的购物车和独立下单由 M5 负责，M4 不获取报价或提交订单。
 - 提交携带 `quoteId` 和购物车版本。价格或库存变化时明确展示差异，用户手动路径需重新确认；AI 路径仅在授权范围内重试。
 
 ### 4.3 长期交接链接
@@ -406,27 +387,10 @@ type LoginResponse = {
   session: { expiresAt: string };
 };
 
-type ProductSearchResponse = {
-  items: ProductCard[]; // 本次返回条数，pageSize 默认 20、最大 100
-  pageSize: number;
+type AssistantSearchResponse = {
+  products: ProductCard[];
   nextCursor: string | null;
-  hasMore: boolean;
-};
-
-type AssistantSearchResponse = ProductSearchResponse & {
-  topComparisons: Array<{
-    rank: 1 | 2 | 3;
-    productId: string;
-    price: { amountMinor: number; currency: "TWD"; label: "CURRENT" | "ESTIMATE" } | null;
-    discountSummary: string[];
-    comparableAttributes: Array<{ key: string; label: string; value: string | null }>;
-    inventoryStatus: "AVAILABLE" | "LOW_STOCK" | "OUT_OF_STOCK" | "NOT_AVAILABLE";
-    deliveryWindow: { from: string; to: string } | null;
-    rating: { value: number; count: number } | null;
-    strengths: Array<{ text: string; basisFields: string[] }>;
-    tradeoffs: Array<{ text: string; basisFields: string[] }>;
-  }>;
-  comparisonVersion: string;
+  intentSummary: string;
 };
 
 type Quote = {
@@ -461,7 +425,7 @@ type OrderGroupView = {
 };
 ```
 
-`ProductCard`、`AllocationItem` 的字段及完整 API DTO 在实现阶段随 OpenAPI 明细化；上述类型是跨端契约摘要，不是独立可编译代码。
+`ProductCard`、`AllocationItem` 的字段及完整 API DTO 在实现阶段随 OpenAPI 明细化；上述类型是跨端契约摘要，不是独立可编译代码。搜索结果中的评论字段只包含评分和评论数，全部公开脱敏评论通过 `GET /api/v1/products/:id/reviews` 分页读取。
 
 | 接口                                                         | 用途                                                                                                                            |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -470,8 +434,8 @@ type OrderGroupView = {
 | `GET /api/v1/auth/session`                                   | 获取当前登录态和服务端授权字段，用于刷新首页登录状态                                                                            |
 | `POST /api/v1/me/authorization`                              | “我的”授权入口；仅登录且未授权用户可提交 `{ consent: true }`，成功后将 `is_authorized` 更新为 `true`；已授权后前端隐藏 checkbox |
 | `GET /api/v1/products`、`GET /api/v1/products/:id`           | 商品列表（pageSize 默认 20、最大 100，cursor 分页）与商品详情                                                                   |
-| `POST /api/v1/assistant/search`                              | AI 助手自然语言搜索，cursor 分页（pageSize 默认 20、最大 100）及最多 3 条可追溯比较数据                                         |
-| `GET /api/v1/products/:id/reviews`                           | 脱敏评论分页                                                                                                                    |
+| `POST /api/v1/assistant/search`                              | AI 助手自然语言需求解析与商品推荐，cursor 分页（pageSize 默认 20、最大 100）；返回相关商品及公开规格、库存和脱敏评论摘要，不返回推荐分数或内部排序字段 |
+| `GET /api/v1/products/:id/reviews`                           | 商品全部已发布、已脱敏评论的 cursor 分页；前端只展示服务端允许公开的字段 |
 | `POST /api/v1/carts`、`PATCH /api/v1/carts/:id/items`        | 创建及编辑购物车                                                                                                                |
 | `POST /api/v1/carts/reconcile`                              | 合并购物车 SKU、锁定可用库存、返回缺货拆分和购物车版本                                                                             |
 | `POST /api/v1/carts/quote`                                  | 按购物车版本读取服务端锁定快照，按来源自动应用符合条件且可叠加的优惠规则并返回报价；不接收用户优惠选择                         |
@@ -498,7 +462,7 @@ type OrderGroupView = {
 
 ## 8. 验证计划与待定边界
 
-交互验收对应需求 AC-01～AC-20，重点验证：首页不自动弹窗、点击登录打开 modal、未授权用户 checkbox 默认未勾选且文案正确、未勾选仍可登录、勾选后服务端保存授权字段、已授权用户不显示 checkbox、“我的”授权入口可完成授权、登录失败保留弹窗、未登录建单返回 401、已登录未授权建单返回 `AUTHORIZATION_REQUIRED` 且不创建订单、匿名交接只读、部分缺货提醒、下单不扣款、扣款失败不重复收费、退货运费明细、已下单链接重访，以及首页助手占据页面位置（不浮动遮罩）且默认展开、收起动画、小精灵拖动入口、TOP3 对比按钮与左侧浮动抽屉、列表独立滚动和“我的”中的订单/物流/退款入口隔离。
+交互验收对应需求 AC-01～AC-20，重点验证：首页不自动弹窗、点击登录打开 modal、未授权用户 checkbox 默认未勾选且文案正确、未勾选仍可登录、勾选后服务端保存授权字段、已授权用户不显示 checkbox、“我的”授权入口可完成授权、登录失败保留弹窗、未登录建单返回 401、已登录未授权建单返回 `AUTHORIZATION_REQUIRED` 且不创建订单、匿名交接只读、部分缺货提醒、下单不扣款、扣款失败不重复收费、退货运费明细、已下单链接重访，以及首页助手占据页面位置（不浮动遮罩）且默认展开、收起动画、小精灵拖动入口、Agent 结果区独立滚动、商品规格/库存/评论展示和“我的”中的订单/物流/退款入口隔离。
 
 Q-01～Q-08 以需求文档为统一决策入口。授权文案和“我的”再次授权方式已确认；授权撤销/更新及存量订单影响本期不考虑。支付渠道、分批收货、缺货后续处理、促销舍入仍按需求文档的待定边界处理。
 
@@ -509,4 +473,4 @@ Q-01～Q-08 以需求文档为统一决策入口。授权文案和“我的”�
 - 用户名为空、密码少于 8 个字符、两次密码不一致时在弹窗内原位提示；用户名重复由服务端返回 409 `USERNAME_ALREADY_EXISTS`，保留弹窗和输入内容。
 - 注册处理中禁用提交按钮；失败不跳转、不清空输入；桌面窗口变窄时弹窗保持视口内、表单单列且不产生横向溢出。
 
-本次新增布局验收：首页助手占据页面位置、宽度稳定且不遮挡主内容；小精灵入口拖动后仍留在视口内并可通过键盘打开；桌面窗口调整后仍保持布局可用；长结果列表滚动不带动 TOP3 或底部输入框；比较字段缺失时如实标注且不显示隐藏权重。尚未执行浏览器视觉回归。
+本次新增布局验收：首页助手占据页面位置、宽度稳定且不遮挡主内容；小精灵入口拖动后仍留在视口内并可通过键盘打开；桌面窗口调整后仍保持布局可用；长结果列表滚动不带动底部输入框；商品字段缺失时如实标注且不显示隐藏权重。尚未执行浏览器视觉回归。

@@ -6,14 +6,6 @@ import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
 
 const PAGE_SIZE = 20;
-const categoryTone: Record<string, string> = {
-  "全部商品": "all",
-  "3C 配件": "office",
-  "居家生活": "home",
-  "美妝保養": "media",
-  "運動戶外": "fitness",
-  "食品飲料": "kitchen",
-};
 
 type PromotionRule = {
   id: string;
@@ -42,7 +34,7 @@ export default function HomePage() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [productsState, setProductsState] = useState<"loading" | "ready" | "error">("loading");
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("全部商品");
+  const [categoryId, setCategoryId] = useState("");
   const [sort, setSort] = useState("recommended");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [addedId, setAddedId] = useState<string | null>(null);
@@ -93,15 +85,20 @@ export default function HomePage() {
     };
   }, [reload]);
 
-  const categories = useMemo(
-    () => ["全部商品", ...Array.from(new Set(products.map((product) => product.category)))],
-    [products]
-  );
+  const categories = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string }>();
+    for (const product of products) {
+      if (!seen.has(product.categoryId)) {
+        seen.set(product.categoryId, { id: product.categoryId, name: product.category });
+      }
+    }
+    return [{ id: "", name: "全部商品" }, ...seen.values()];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const result = products.filter((product) => {
-      const matchesCategory = category === "全部商品" || product.category === category;
+      const matchesCategory = categoryId === "" || product.categoryId === categoryId;
       const matchesQuery =
         !normalized ||
         `${product.name} ${product.brand} ${product.description} ${product.category}`
@@ -113,9 +110,9 @@ export default function HomePage() {
     if (sort === "price-high") return [...result].sort((a, b) => b.price - a.price);
     if (sort === "rating") return [...result].sort((a, b) => b.rating - a.rating);
     return result;
-  }, [products, category, query, sort]);
+  }, [products, categoryId, query, sort]);
 
-  useEffect(() => setVisibleCount(PAGE_SIZE), [category, query, sort]);
+  useEffect(() => setVisibleCount(PAGE_SIZE), [categoryId, query, sort]);
   useEffect(() => {
     const target = loadMoreRef.current;
     if (!target) return;
@@ -175,7 +172,7 @@ export default function HomePage() {
             className="clear-filter clear-filter--toolbar"
             type="button"
             onClick={() => {
-              setCategory("全部商品");
+              setCategoryId("");
               setQuery("");
               setSort("recommended");
             }}
@@ -189,12 +186,12 @@ export default function HomePage() {
               <span className="shop-filter-label">品类</span>
               {categories.map((item) => (
                 <button
-                  key={item}
-                  className={category === item ? "shop-filter is-active" : "shop-filter"}
+                  key={item.id}
+                  className={categoryId === item.id ? "shop-filter is-active" : "shop-filter"}
                   type="button"
-                  onClick={() => setCategory(item)}
+                  onClick={() => setCategoryId(item.id)}
                 >
-                  {item}
+                  {item.name}
                 </button>
               ))}
             </div>
@@ -247,7 +244,7 @@ export default function HomePage() {
                   className="button button--soft"
                   type="button"
                   onClick={() => {
-                    setCategory("全部商品");
+                    setCategoryId("");
                     setQuery("");
                   }}
                 >
@@ -286,7 +283,7 @@ function ProductCard({
             <Link href={`/products/${product.id}`} title={product.name}>
               {product.name}
             </Link>
-            <span className={`category-badge category-badge--${categoryTone[product.category] || "all"}`}>
+            <span className={`category-badge category-badge--${product.tone || "all"}`}>
               {product.category}
             </span>
           </h2>

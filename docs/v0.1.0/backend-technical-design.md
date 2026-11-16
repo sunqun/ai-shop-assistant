@@ -2,7 +2,7 @@
 
 ## 1. 版本、技术栈与边界
 
-- 版本：`v0.3-assistant-comparison`，更新时间：2026-11-15（Asia/Shanghai）；补充网页 AI 助手搜索及 TOP3 商品比较数据契约。
+- 版本：`v1.0-assistant-product-agent`，更新时间：2026-11-16（Asia/Shanghai）；将网页 AI 助手定义为服务端编排的只读商品推荐 Agent（意图识别 + 工具调用 + 相关商品返回）。
 - 依据：[需求功能清单](requirements-analysis.md) D-01～D-08；与 [前端文档](frontend-technical-design.md) 共用 `/api/v1` 契约。
 - Node.js 当前受支持 LTS（建议 24）+ TypeScript + NestJS，MySQL 8 / InnoDB；建议 Prisma 负责常规 CRUD，库存使用参数化事务及行锁。
 - Redis 用于缓存、限流和可选的短期会话辅助；用户授权字段、库存预留、幂等结果、报价、订单和应收以 MySQL 为准，不依赖 Redis TTL 保证账务正确。用户已提供本地 MySQL 连接，实施阶段从环境变量读取连接信息，不把连接串或密码写入仓库。
@@ -46,7 +46,7 @@ flowchart LR
 | `agents`、`agent_authorizations`、`authorization_requests` | M1 不创建、不依赖                                                                  | 未来是否保留由后续需求评审，当前 `needs_human_review`                                                                                          |
 | 支付代扣凭证/mandates                                      | M1 不创建、不接入                                                                  | 是否需要及其和用户授权字段关系为 `needs_human_review`；不保存银行卡敏感明文                                                                    |
 | `products`、`skus`                                         | 商品信息、规格、售价、发布状态                                                     | 商品 ID/SKU 唯一，公开字段白名单                                                                                                               |
-| `product_attributes` 或等价 JSON 结构                      | 品类、属性 key/value/标准单位/可比标记                                             | 仅公开可比字段；同品类且单位可归一后才生成比较结论                                                                                             |
+| `product_attributes` 或等价 JSON 结构                      | 品类、属性 key/value/标准单位                                                     | 仅返回公开规格字段；缺失字段不得由 Agent 推断                                                                                                  |
 | `inventory`                                                | sku_id、on_hand、reserved、version                                                 | on_hand >= reserved >= 0；available 查询时计算                                                                                                 |
 | `inventory_reservations`                                   | cart_id、sku_id、qty、expires_at、status                                           | 状态 ACTIVE/COMMITTED/RELEASED；按过期时间索引                                                                                                 |
 | `carts`、`cart_items`、`cart_allocations`                  | 来源、版本、原需求、锁定数量、缺货数量                                             | 需求量 = 本次分配量 + 缺货量；来源由后端判定                                                                                                   |
@@ -111,7 +111,7 @@ flowchart LR
 - `POST /api/v1/carts/reconcile` 接收 `{ cartToken, items, idempotencyKey }`。服务端合并重复 SKU、按 SKU 稳定顺序锁库存、保存 `cart_version`，返回 `allocations`、`split`、`fullyOutOfStock` 和 24 小时 `expiresAt`。同一购物车和幂等键重复提交相同内容返回原响应；复用不同内容返回 `409 IDEMPOTENCY_KEY_REUSED`。
 - `POST /api/v1/carts/quote` 接收 `{ cartToken, cartVersion }`，只读取服务端已锁定数量和可信商品价格，自动返回 `quoteId`、商品小计、总折扣、运费、总应付、`appliedRules`、规则版本和有效期。前端不提交优惠选择；购物车版本变化、锁定过期、全部缺货分别返回 `CART_CHANGED`、`CART_RESERVATION_EXPIRED`、`OUT_OF_STOCK`。
 - `POST /api/internal/inventory/expire` 由带 `Bearer INVENTORY_CRON_SECRET` 的定时任务调用，批量把到期 ACTIVE 预留改为 `EXPIRED`、归还 `inventory_skus.reserved` 并写入事件审计；接口不对前台开放。
-- 当前 WEB reconcile 固定来源为 `WEB`；AI 来源和 C 优惠由 M4 AI 自动建单入口接入。A 与 B 自动叠加，AI 自动建单来源在此基础上再叠加 C；门槛使用折前商品小计，C 只折 AI 商品，免运按整购物车计算；前台按 NT$ 整数显示。
+- 当前 WEB reconcile 固定来源为 `WEB`；M5 AI 购物车来源和 C 优惠由 M5 可信下单入口接入。A 与 B 自动叠加，AI 下单来源在此基础上再叠加 C；门槛使用折前商品小计，C 只折 AI 商品，免运按整购物车计算；前台按 NT$ 整数显示。
 - 通过后创建父订单组及有库存子单，记录缺货待处理项。补货后是否自动创建子单未获确认，不自动收款或承诺发货时间。
 - ACTIVE 预留转 COMMITTED，同时 `on_hand -= qty`、`reserved -= qty`，按“on_hand 表示尚未分配给已下订单的库存”的定义扣除一次；发货不再二次减库存。
 - 取消已建单但未履约的商品时按明确取消/返库流程补回库存；退货需验收入库，不能仅凭申请返库。
@@ -120,10 +120,10 @@ flowchart LR
 
 ## 6. 自动报价引擎
 
-`PricingService` 是价格计算的唯一实现，网页、AI 助手与交接来源均通过该服务获取报价，不得在各自入口重复实现优惠、运费或折扣。输入：商品和数量快照、真实 WEB/AI 来源、配送信息、库存拆分方案及规则版本。输出 `quoteId`、`cartVersion`、小计、逐项优惠、运费、总应付、规则明细和有效期。
+`PricingService` 是价格计算的唯一实现，网页、M5 AI 购物车与交接来源均通过该服务获取报价，不得在各自入口重复实现优惠、运费或折扣。输入：商品和数量快照、真实 WEB/AI 来源、配送信息、库存拆分方案及规则版本。输出 `quoteId`、`cartVersion`、小计、逐项优惠、运费、总应付、规则明细和有效期。
 
 1. 读取规则：A 按折前整车商品小计满 NT$1,000 减 NT$100；B 按折前整车商品小计满 NT$990 免运，否则收 NT$100；满足条件的 A/B 自动叠加。普通 WEB 购物车不应用 C。
-2. 可信 M4 AI 自动建单来源在满足的 A/B 规则基础上，对 AI 商品金额额外应用 C（95 折），不折运费；来源资格由服务端确认。报价按固定规则自动计算，不枚举促销候选，也不接收用户优惠选择。
+2. 可信 M5 AI 下单来源在满足的 A/B 规则基础上，对 AI 商品金额额外应用 C（95 折），不折运费；来源资格由服务端确认。报价按固定规则自动计算，不枚举促销候选，也不接收用户优惠选择。
 3. 计算最终应付总额（含整车运费）；金额接口使用最小货币单位整数，C 折扣结果按 `Math.round` 取整，页面按 NT$ 整数显示。
 4. 保存规则版本、实际应用的规则、行级优惠分摊和拆单费用归属。总分摊必须与总优惠一致，舍入余量采用确定性的分摊策略。
 5. 商品数量、来源资格、地址、拆分结果、规则版本改变后重新报价；建单绑定有效报价，历史单不动态改价。
@@ -183,7 +183,7 @@ sequenceDiagram
 - 注册：请求 `{ username, password, confirmPassword }`；服务端 trim 用户名、校验用户名非空和密码至少 8 个字符，使用 `scrypt` 哈希后写入 `users`，服务端生成 UUID `userid`，`is_authorized` 固定为 `false`，成功后建立网页 session 并返回用户摘要。唯一用户名约束处理并发重复注册，冲突返回 HTTP 409 `USERNAME_ALREADY_EXISTS`；格式或校验失败返回 400；数据库不可用返回 503，不暴露 SQL 细节。
 - 授权状态由 `POST /api/v1/auth/login` 的 checkbox 或 `POST /api/v1/me/authorization` 写入，并通过登录响应及 `GET /api/v1/auth/session` 读取；M1 不提供撤销/更新接口。
 - 商品：`GET /api/v1/products`、`GET /api/v1/products/:id`、`GET /api/v1/products/:id/reviews`。
-- 网页助手：`POST /api/v1/assistant/search`，输入自然语言查询，cursor 分页返回命中商品（pageSize 默认 20、最大 100）和按搜索排序前 3 件生成的比较数据；与网页目录搜索共享商品、推荐和脱敏评论查询能力。
+- 网页助手（服务端编排 Agent）：`POST /api/v1/assistant/search` 接收自然语言查询，服务端先做意图识别，再编排只读工具（商品目录、规格/库存、本人历史订单、脱敏评论、报价摘要、授权读取）；按内部符合度分流返回：符合度 > 80% 返回单一最优商品及可追溯理由，否则返回相关商品列表（cursor 分页，pageSize 默认 20、最大 100）。与网页目录搜索共享商品、推荐和脱敏评论查询能力。
 - 购物车：`POST /api/v1/carts`、`PATCH /api/v1/carts/:id/items`、`POST /api/v1/carts/:id/quotes`、`POST /api/v1/carts/:id/orders`。
 - 交接：`POST /api/v1/carts/:id/handoff-links`、`POST /api/v1/handoff/exchange`。
 - 订单：`GET /api/v1/order-groups/:id`、`POST /api/v1/order-groups/:id/receipt-confirmations`（是否启用由 Q-02 决定）。
@@ -198,13 +198,13 @@ sequenceDiagram
 
 - 下列 Agent API 是历史方案占位，不属于 M1 交付：`GET /api/v1/agent/products`、`GET /api/v1/agent/products/:id`、`GET /api/v1/agent/products/:id/reviews`、`POST /api/v1/agent/carts`、`POST /api/v1/agent/carts/:id/quotes`。
 - 是否引入外部 Agent API 及其身份接入方式需重新评审，标记为 `needs_human_review`。若未来提供建单能力，仍必须关联已登录用户并通过 `users.is_authorized` 检查，不得引入绕开该用户字段的建单路径。
-- M1 不交付 Agent grant、OAuth 或第三方授权。本版网页助手是 UI，不应伪装为独立 Agent 身份。
+- M1 不交付 Agent grant、OAuth 或第三方授权，也不交付外部 Agent API。本版网页助手是服务端编排的只读 Agent，身份是网页 session 用户，不是独立外部 Agent，不授予下单或授权写入能力。
 
 注册事务边界：先生成密码哈希，再在单条 `INSERT` 中写入用户和默认授权字段；依赖 `users.username` 唯一索引处理并发，冲突时不创建第二条记录。密码明文只存在于请求处理内存，日志不得记录用户名以外的认证输入、密码或 session 原文。注册成功与登录成功共用 `setSession`，但注册绝不写入 `is_authorized=true`。
 
 Agent 端无收货确认/代扣权限。若未来提供外部 Agent API，其客户端身份与网页 session 分开；订单仍需关联登录用户，AI 来源由服务端可信身份和购物车 provenance 确定，用户修改 `source` 不可骗取 95 折。交接后仍保留 AI 创建购物车的来源；修改范围导致的资格变化应在计价规则中明确。
 
-网页内嵌助手只是用户界面，不等于外部 Agent 身份，也不自动获得下单权限。`POST /api/v1/assistant/search` 只负责搜索和生成比较建议；加入购物车、授权、报价、库存锁定和下单继续使用既有接口与校验。
+网页助手由服务端编排意图识别与只读工具，但仍是网页 session 用户身份，不等于外部 Agent，也不自动获得下单或授权写入权限。`POST /api/v1/assistant/search` 只负责意图识别、检索和生成推荐/比较；加入购物车、授权写入、报价、库存锁定和下单继续使用既有接口与校验。Agent 不得写入授权字段、不得自行计算优惠/运费、不得创建订单。
 
 ### 9.3 一致响应与幂等
 
@@ -234,13 +234,16 @@ Agent 端无收货确认/代扣权限。若未来提供外部 Agent API，其客
 - 高毛利乘以 1.5 的内部规则留在服务端配置，不进入公开 API、提示词或前端包；披露策略待 Q-06 确认。
 - 本期不评估全量 10 万条返回、OpenSearch 和数据导出。
 
-### 10.4 助手搜索与 TOP3 比较
+### 10.4 助手搜索：服务端编排 Agent 与推荐返回
 
-- 助手搜索请求包含 `query`、可选 `cursor`、筛选条件和 `comparisonContext`；服务端将 `pageSize` 夹在默认 20、最大 100，不接受客户端指定推荐分数或优劣结论。
-- 响应建议包含 `items`、`pageSize`、`hasMore`、`nextCursor`、`topComparisons` 和 `comparisonVersion`。`topComparisons` 最多 3 项，按本次搜索结果排序前 3 个商品生成；少于 3 个只返回实际数量。
+- 网页助手是服务端编排的只读 Agent。`POST /api/v1/assistant/search` 接收自然语言 `query` 后，服务端先做意图识别，输出结构化意图（品类、规格约束、预算、配送偏好、数量、是否复购），再编排只读工具：商品目录检索、规格/库存、本人历史订单、脱敏评论、报价摘要（走 `PricingService`）、授权状态读取（只读 `is_authorized`）。
+- 上述工具是服务端内部对既有契约的封装，不新增对前端开放的 MCP 接口；工具只返回公开/允许展示字段与可追溯依据，不输出毛利、内部推荐分数、权重、提示词或未脱敏评论。历史订单与评论必须做资源级鉴权，只能读取当前登录用户自己的数据。
+- 返回口径按内部「符合度」分流：符合度 > 80% 返回 `matchLevel=SINGLE`，含单一最优商品与可追溯理由（优势/权衡 + `basisFields`）；符合度 ≤ 80% 返回 `matchLevel=LIST`，含相关商品列表（cursor 分页，pageSize 默认 20、最大 100，返回 `items`、`pageSize`、`hasMore`、`nextCursor`）。符合度分数不出接口、不向前端返回。
+- 搜索请求包含 `query`、可选 `cursor`、筛选条件和 `comparisonContext`；服务端将 `pageSize` 夹在默认 20、最大 100，不接受客户端指定推荐分数或优劣结论。
+- 列表形态下仍返回 `topComparisons`（最多 3 项，按本次搜索结果排序前 3 个商品生成；少于 3 个只返回实际数量），供前端在左侧浮动抽屉展示；单一最优形态不返回 TOP3 比较。
 - 每个比较项只输出公开或允许展示的字段：当前价/可验证报价摘要、优惠说明、品类可比规格、库存状态、可信配送窗口、评分/评论量，以及由这些字段生成的结构化 `strengths` 与 `tradeoffs`。字段缺失返回 `null` 或明确的 `NOT_AVAILABLE`，不能降级成猜测。
 - 比较结论在生成时保存 `basisFields` 和数据时间戳，便于前端显示依据和排查旧库存/价格；不输出毛利、内部推荐分数、权重、提示词或未脱敏评论。
-- 比较排序沿用服务端推荐排序；对外不得宣称 TOP3 是客观质量排名。价格/库存和配送信息在进入购物车、报价和下单时重新校验，助手搜索响应不是承诺。
+- 比较排序沿用服务端推荐排序；对外不得宣称结果为客观质量排名。价格/库存和配送信息在进入购物车、报价和下单时重新校验，助手搜索响应不是承诺。
 - 查询结果可以缓存，但缓存键必须包含查询、筛选、排序版本和数据版本；价格、库存、配送缓存设置短 TTL，并在结账前强制刷新。
 
 ## 11. 可靠性、观测与验证计划
