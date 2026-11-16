@@ -35,10 +35,12 @@ function addToCart(product: Product) {
     current = [];
   }
   const existing = current.find((item) => item.id === product.id);
+  const reachedLimit = existing ? existing.quantity >= product.stock : false;
   if (existing) existing.quantity = Math.min(existing.quantity + 1, product.stock);
   else current.push({ id: product.id, quantity: 1, sku: product.specs[0] });
   window.localStorage.setItem("ai-shop-cart", JSON.stringify(current));
   window.dispatchEvent(new CustomEvent("cart-updated"));
+  return !reachedLimit;
 }
 
 export default function HomePage() {
@@ -47,6 +49,7 @@ export default function HomePage() {
   const [sort, setSort] = useState("recommended");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [addedId, setAddedId] = useState<string | null>(null);
+  const [addMessage, setAddMessage] = useState("");
   const [promotionRules, setPromotionRules] = useState<PromotionRule[]>([]);
   const [promotionState, setPromotionState] = useState<"loading" | "ready" | "error">("loading");
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -106,14 +109,16 @@ export default function HomePage() {
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   function handleAdd(product: Product) {
     if (!product.stock) return;
-    addToCart(product);
+    const added = addToCart(product);
     setAddedId(product.id);
+    setAddMessage(added ? `${product.name} 已加入购物车` : `${product.name} 已达到库存上限`);
     window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1800);
   }
 
   return (
     <div className="shop-home">
       <div className="shop-home__content">
+        <div className="sr-only" role="status" aria-live="polite">{addMessage}</div>
         <div className="promo-strip" role="status" aria-live="polite">
           <span className="promo-strip__dot" aria-hidden="true" />
           <div className="promo-strip__content">
@@ -231,7 +236,7 @@ function ProductCard({
   onAdd: (product: Product) => void;
 }) {
   return (
-    <article className="product-tile">
+    <article className={`product-tile${added ? " product-tile--added" : ""}`}>
       <div className="product-tile__body">
         <div className="product-tile__title-row">
           <h2 className="product-tile__name" title={product.name}>

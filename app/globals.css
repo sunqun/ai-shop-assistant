@@ -116,6 +116,8 @@ select {
   color: #fff;
   font-size: 12px;
 }
+.badge--bump { animation: cart-badge-bump 420ms ease-out; }
+@keyframes cart-badge-bump { 0% { transform: scale(1); } 45% { transform: scale(1.35); } 100% { transform: scale(1); } }
 .site-main {
   width: min(1200px, calc(100% - 48px));
   margin: 0 auto;
@@ -662,6 +664,11 @@ body:has(.shop-home) { overflow: hidden; }
 .stock--in { color: var(--success); }
 .stock--out { color: #b42318; }
 .button--added { background: #e3f6ec; color: var(--success); }
+.product-tile--added { animation: product-tile-flash 700ms ease-out; }
+@keyframes product-tile-flash { 0% { box-shadow: 0 0 0 0 rgba(47, 128, 93, .35); } 100% { box-shadow: 0 0 0 8px rgba(47, 128, 93, 0); } }
+.button--added { animation: add-button-pop 420ms ease-out; }
+@keyframes add-button-pop { 0% { transform: scale(1); } 50% { transform: scale(1.06); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .badge--bump, .product-tile--added, .button--added { animation: none; } }
 .load-more { min-height: 32px; padding: 10px 0; color: var(--muted); text-align: center; font-size: 12px; }
 .assistant-dock--embedded { position: relative; top: auto; right: auto; bottom: auto; width: auto; height: 100%; max-height: none; border-radius: 12px; box-shadow: 0 6px 20px rgba(31,48,84,.08); }
 .assistant-dock--embedded .assistant-dock__body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; min-height: 0; height: calc(100% - 66px); }

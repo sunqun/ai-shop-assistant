@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LanguageProvider, LanguageSelector } from "@/components/language-provider";
 import { AuthProvider, LoginButton } from "@/components/auth-provider";
+import { CartCount } from "@/components/cart-count";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -29,7 +30,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
                   <LanguageSelector />
                   <LoginButton />
                   <Link className="cart-link" href="/cart">
-                    购物车 <span className="badge">0</span>
+                    购物车 <CartCount />
                   </Link>
                 </div>
               </div>
