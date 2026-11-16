@@ -33,8 +33,9 @@ export async function readApiResponse<T>(response: Response, fallback: string): 
     // Keep the HTTP status when the server did not return JSON.
   }
   if (!response.ok) {
+    const message = typeof payload.message === "string" ? payload.message : fallback;
     throw new ApiRequestError(
-      typeof payload.message === "string" ? payload.message : fallback,
+      message,
       response.status,
       typeof payload.code === "string" ? payload.code : undefined
     );

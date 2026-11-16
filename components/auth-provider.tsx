@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { showToast } from "@/lib/toast";
 
 export type AuthUser = { userid: string; username: string; isAuthorized: boolean };
 
@@ -69,7 +70,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) setUser(body.user);
       })
       .catch(() => {
-        if (!cancelled) setUser(null);
+        if (!cancelled) {
+          setUser(null);
+          showToast("登录状态暂时无法读取，请稍后重试。");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -114,7 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
+    const response = await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
+    if (!response.ok) throw new Error("logout failed");
     setUser(null);
   }, []);
 
@@ -161,14 +166,18 @@ export function LoginButton() {
   if (loading) return <span className="muted">加载中…</span>;
   if (!user)
     return (
-      <button className="button button--ghost" type="button" onClick={openLogin}>
+      <button className="logout-button" type="button" onClick={openLogin}>
         登录
       </button>
     );
   return (
     <span className="auth-header">
       <span className="auth-header__name">{user.username}</span>
-      <button className="button button--ghost" type="button" onClick={logout}>
+      <button
+        className="logout-button"
+        type="button"
+        onClick={() => void logout().catch(() => showToast("退出登录失败，请稍后重试。"))}
+      >
         退出
       </button>
     </span>
@@ -182,7 +191,6 @@ function LoginDialog() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [consent, setConsent] = useState(false);
-  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -192,7 +200,6 @@ function LoginDialog() {
       setPassword("");
       setConfirmPassword("");
       setConsent(false);
-      setError("");
       setSubmitting(false);
     }
   }, [loginOpen]);
@@ -200,15 +207,12 @@ function LoginDialog() {
   if (!loginOpen) return null;
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
     setSubmitting(true);
     try {
       if (mode === "register") await register(username, password, confirmPassword);
       else await login(username, password, consent);
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : mode === "register" ? "注册失败" : "登录失败"
-      );
+    } catch {
+      showToast(mode === "register" ? "注册失败，请稍后重试。" : "登录失败，请检查账号和密码后重试。");
     } finally {
       setSubmitting(false);
     }
@@ -282,11 +286,6 @@ function LoginDialog() {
               <span>同意 AI 助手代为创建订单记录</span>
             </label>
           )}
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
           <button className="button button--primary" type="submit" disabled={submitting}>
             {submitting
               ? mode === "login"
@@ -301,7 +300,6 @@ function LoginDialog() {
             type="button"
             onClick={() => {
               setMode(mode === "login" ? "register" : "login");
-              setError("");
               setConfirmPassword("");
             }}
           >

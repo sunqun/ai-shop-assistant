@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import type { CatalogProduct, CatalogReview } from "@/lib/catalog";
 import { addToCartAndPersist } from "@/lib/cart-client";
+import { showToast } from "@/lib/toast";
 
 type DetailResponse = {
   product: CatalogProduct;
@@ -32,7 +33,6 @@ export default function ProductDetailPage({
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [addMessage, setAddMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -67,7 +67,10 @@ export default function ProductDetailPage({
         setReviews(Array.isArray(data.reviews) ? data.reviews : []);
         setState("ready");
       } catch {
-        if (active) setState("error");
+        if (active) {
+          setState("error");
+          showToast("商品信息暂时无法加载，请稍后重试。");
+        }
       }
     }
     load();
@@ -117,18 +120,15 @@ export default function ProductDetailPage({
   async function add() {
     const selectedQuantity = Math.max(1, Math.min(quantity, currentProduct.stock));
     setAdding(true);
-    setAddMessage("");
     try {
       const result = await addToCartAndPersist(
         { id: currentProduct.id, quantity: selectedQuantity, sku: currentProduct.id },
         currentProduct.stock,
       );
       setAdded(true);
-      setAddMessage(
-        result.reachedLimit ? "已达到库存上限，已加入可用数量。" : "已加入购物车。",
-      );
-    } catch (error) {
-      setAddMessage(error instanceof Error ? error.message : "加入购物车失败，请稍后重试。");
+      showToast(result.reachedLimit ? "已达到库存上限，已加入可用数量。" : "已加入购物车。", "success");
+    } catch {
+      showToast("加入购物车失败，请稍后重试。");
     } finally {
       setAdding(false);
     }
@@ -201,7 +201,6 @@ export default function ProductDetailPage({
           >
             {adding ? "处理中…" : added ? "已加入购物车" : "加入购物车"}
           </button>
-          {addMessage ? <p className="notice" role="status" aria-live="polite">{addMessage}</p> : null}
 
           <ul className="product-detail__facts">
             <li><span>品牌</span><strong>{currentProduct.brand || "品牌信息待补充"}</strong></li>

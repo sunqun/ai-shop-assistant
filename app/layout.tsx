@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LanguageProvider, LanguageSelector } from "@/components/language-provider";
 import { AuthProvider, LoginButton } from "@/components/auth-provider";
+import { ToastProvider } from "@/components/toast-provider";
 import { CartCount } from "@/components/cart-count";
 import "./globals.css";
 
@@ -16,26 +17,27 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <LanguageProvider>
           <AuthProvider>
-            <header className="site-header">
+            <ToastProvider>
+              <header className="site-header">
               <div className="site-header__inner">
                 <Link className="brand" href="/">
                   AI 商城
                 </Link>
                 <nav className="site-nav" aria-label="主导航">
                   <Link href="/">商品</Link>
-                  <Link href="/cart">购物车</Link>
                   <Link href="/account">我的</Link>
+                  <Link className="cart-link" href="/cart">
+                    购物车 <CartCount />
+                  </Link>
                 </nav>
                 <div className="site-header__actions">
                   <LanguageSelector />
                   <LoginButton />
-                  <Link className="cart-link" href="/cart">
-                    购物车 <CartCount />
-                  </Link>
                 </div>
               </div>
             </header>
             <main className="site-main">{children}</main>
+            </ToastProvider>
           </AuthProvider>
         </LanguageProvider>
       </body>

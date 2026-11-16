@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
 import { addToCartAndPersist } from "@/lib/cart-client";
+import { showToast } from "@/lib/toast";
 
 const PAGE_SIZE = 20;
 
@@ -22,7 +23,6 @@ export default function HomePage() {
   const [sort, setSort] = useState("recommended");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [addedId, setAddedId] = useState<string | null>(null);
-  const [addMessage, setAddMessage] = useState("");
   const [addingId, setAddingId] = useState<string | null>(null);
   const [promotionRules, setPromotionRules] = useState<PromotionRule[]>([]);
   const [promotionState, setPromotionState] = useState<"loading" | "ready" | "error">("loading");
@@ -42,7 +42,10 @@ export default function HomePage() {
         setPromotionState("ready");
       })
       .catch(() => {
-        if (active) setPromotionState("error");
+        if (active) {
+          setPromotionState("error");
+          showToast("优惠规则暂时无法加载，请稍后重试。");
+        }
       });
     return () => {
       active = false;
@@ -63,7 +66,10 @@ export default function HomePage() {
         setProductsState("ready");
       })
       .catch(() => {
-        if (active) setProductsState("error");
+        if (active) {
+          setProductsState("error");
+          showToast("商品暂时无法加载，请稍后重试。");
+        }
       });
     return () => {
       active = false;
@@ -116,19 +122,16 @@ export default function HomePage() {
   async function handleAdd(product: CatalogProduct) {
     if (!product.stock) return;
     setAddingId(product.id);
-    setAddMessage("");
     try {
       const result = await addToCartAndPersist(
         { id: product.id, quantity: 1, sku: product.id },
         product.stock,
       );
       setAddedId(product.id);
-      setAddMessage(
-        result.reachedLimit ? `${product.name} 已达到库存上限` : `${product.name} 已加入购物车`,
-      );
+      showToast(result.reachedLimit ? "已达到库存上限，已加入可用数量。" : "已加入购物车。", "success");
       window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1800);
-    } catch (error) {
-      setAddMessage(error instanceof Error ? error.message : "加入购物车失败，请稍后重试。");
+    } catch {
+      showToast("加入购物车失败，请稍后重试。");
     } finally {
       setAddingId(null);
     }
@@ -137,7 +140,6 @@ export default function HomePage() {
   return (
     <div className="shop-home">
       <div className="shop-home__content">
-        <div className="sr-only" role="status" aria-live="polite">{addMessage}</div>
         <div className="promo-strip" role="status" aria-live="polite">
           <span className="promo-strip__dot" aria-hidden="true" />
           <div className="promo-strip__content">

@@ -1,0 +1,5 @@
+ALTER TABLE inventory_reservations
+  MODIFY COLUMN status ENUM('ACTIVE', 'RELEASED', 'EXPIRED', 'CONSUMED') NOT NULL;
+
+ALTER TABLE inventory_reservation_events
+  MODIFY COLUMN event_type ENUM('RESERVED', 'RELEASED', 'EXPIRED', 'CONSUMED') NOT NULL;

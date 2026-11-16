@@ -71,18 +71,19 @@ const PRODUCT_SELECT = `
   SELECT
     p.product_id, p.name, p.brand, c.name AS category, c.category_id, c.tone,
     p.description, p.price,
-    p.currency, p.stock, p.margin_rate, p.specs,
+    p.currency, COALESCE(inv.on_hand - inv.reserved, 0) AS stock, p.margin_rate, p.specs,
     ROUND(AVG(r.rating), 1) AS rating,
     COUNT(r.review_id) AS review_count,
     (p.recommendation_score * CASE WHEN p.margin_rate >= 0.30 THEN 1.5 ELSE 1 END) AS internal_rank
   FROM products p
   LEFT JOIN categories c ON c.category_id = p.category_id
+  LEFT JOIN inventory_skus inv ON inv.product_id = p.product_id
   LEFT JOIN product_reviews r ON r.product_id = p.product_id
 `;
 
 const PRODUCT_GROUP = `
   GROUP BY p.product_id, p.name, p.brand, c.name, c.category_id, c.tone, p.description,
-    p.price, p.currency, p.stock, p.margin_rate, p.recommendation_score, p.specs
+    p.price, p.currency, inv.on_hand, inv.reserved, p.margin_rate, p.recommendation_score, p.specs
 `;
 
 function parseSpecs(value: string | Record<string, string> | null): Record<string, string> {
@@ -179,7 +180,7 @@ function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): 
     clauses.push("COALESCE((SELECT AVG(rating) FROM product_reviews rr WHERE rr.product_id = p.product_id), 0) >= ?");
     params.push(intent.minRating);
   }
-  if (intent.inStockOnly) clauses.push("p.stock > 0");
+  if (intent.inStockOnly) clauses.push("COALESCE(inv.on_hand - inv.reserved, 0) > 0");
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params };
 }
 

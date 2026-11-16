@@ -43,7 +43,7 @@ flowchart LR
 | `products`、`skus`                                         | 商品信息、规格、售价、发布状态                                                     | 商品 ID/SKU 唯一，公开字段白名单                                                                                                               |
 | `product_attributes` 或等价 JSON 结构                      | 品类、属性 key/value/标准单位                                                     | 仅返回公开规格字段；缺失字段不得由 Agent 推断                                                                                                  |
 | `inventory`                                                | sku_id、on_hand、reserved、version                                                 | on_hand >= reserved >= 0；available 查询时计算                                                                                                 |
-| `inventory_reservations`                                   | cart_id、sku_id、qty、expires_at、status                                           | 状态 ACTIVE/COMMITTED/RELEASED；按过期时间索引                                                                                                 |
+| `inventory_reservations`                                   | cart_id、sku_id、qty、expires_at、status                                           | 状态 ACTIVE/RELEASED/EXPIRED/CONSUMED；按过期时间索引                                                                                           |
 | `carts`、`cart_items`、`cart_allocations`                  | 来源、版本、原需求、锁定数量、缺货数量                                             | 需求量 = 本次分配量 + 缺货量；来源由后端判定                                                                                                   |
 | `quotes`                                                   | cart_version、rule_version、金额、拆分方案、expires_at                             | 不可被客户端金额覆盖；建单校验版本                                                                                                             |
 | `order_groups`、`orders`、`order_items`                    | 一次下单请求、单条订单记录、商品/价格快照                                        | 同一下单意图只能成功一次；仅作为订单记录落库，不进入支付或履约状态                                     |
@@ -91,10 +91,11 @@ flowchart LR
 5. 库存事务提交后通过 outbox 持久化拆分提醒。网页持久 Alert、Agent 响应、订单回执都展示相同明细；提醒投递失败可重试，不能静默丢失。
 6. Redis 只缓存查询结果；到期任务以 MySQL ACTIVE 预留为依据，通过状态条件更新保证只释放一次。
 
-### 5.2 M6/M7 订单记录范围
+### 5.2 M6/M7 订单创建与库存消费
 
-- 本期网站结账点击“付款”只创建一条订单记录。服务端验证 session、授权、购物车版本和有效报价后，在同一 MySQL 事务写入 `order_groups`、`orders`、`order_items` 和创建审计，并以用户 + 幂等键确保重试返回同一订单。
-- 建单不拆分多个子订单，不提交或扣减库存，不发起支付或扣款，不触发物流、发货、收货、退货、退款、通知或其他履约动作。
+- 本期网站结账点击“付款”创建一条订单记录并消费该购物车已锁定的库存。服务端验证 session、授权、购物车版本、报价和未过期的 ACTIVE 预留后，在同一 MySQL 事务写入 `order_groups`、`orders`、`order_items` 和创建审计；同时按 SKU 稳定顺序将 `inventory_skus.on_hand` 与 `reserved` 各减去预留数量、将预留置为 `CONSUMED` 并写入库存事件。任一校验或写入失败时整笔事务回滚。
+- 下单幂等键命中相同参数时返回原订单，不再次消费库存；相同键用于不同参数时返回冲突。预留数量必须与订单分配数量一致，缺失、过期或非 ACTIVE 的预留不能建单。
+- 此处“付款”仅是结账按钮文案，不接入支付渠道、不执行资金扣款、不触发物流、发货、收货、退货、退款、通知或其他履约动作。
 - M7 列表和详情使用 session 中的 `userid` 限定查询范围。响应只含订单标识、来源、创建时间、商品及金额摘要，不输出结算或履约状态。
 
 ### M3 已实现接口契约
@@ -103,7 +104,7 @@ flowchart LR
 - `POST /api/v1/carts/quote` 接收 `{ cartToken, cartVersion }`，只读取服务端已锁定数量和可信商品价格，自动返回 `quoteId`、商品小计、总折扣、运费、总应付、`appliedRules`、规则版本和有效期。前端不提交优惠选择；购物车版本变化、锁定过期、全部缺货分别返回 `CART_CHANGED`、`CART_RESERVATION_EXPIRED`、`OUT_OF_STOCK`。
 - `POST /api/internal/inventory/expire` 由带 `Bearer INVENTORY_CRON_SECRET` 的定时任务调用，批量把到期 ACTIVE 预留改为 `EXPIRED`、归还 `inventory_skus.reserved` 并写入事件审计；接口不对前台开放。
 - 当前 WEB reconcile 固定来源为 `WEB`；M5 AI 购物车来源和 C 优惠由 M5 可信下单入口接入。A 与 B 自动叠加，AI 下单来源在此基础上再叠加 C；门槛使用折前商品小计，C 只折 AI 商品，免运按整购物车计算；前台按 NT$ 整数显示。
-- 报价与库存校验由 M3 购物车/报价链路完成；M6 建单记录关联有效报价快照。本期不在建单事务中提交库存预留或改变库存数量。
+- 报价与预留创建由 M3 购物车/报价链路完成；M6 建单关联有效报价快照，并在订单事务中消费有效预留、减少实物库存。
 - 优惠分摊与运费计算放在父级报价体系内；A/B 门槛和免运按整车折前商品小计判断，拆单不得改变优惠资格或重复收取运费。费用归属需显式记录。
 
 ## 6. 自动报价引擎
@@ -120,12 +121,12 @@ flowchart LR
 
 门槛统一按折前商品小计判断。WEB 商品小计 NT$1,000 时，A/B 同时命中：商品折扣 NT$100、运费 NT$0，应付 NT$900。AI 自动建单来源在此基础上对 AI 商品金额额外应用 C；C 不折运费，折扣结果按最小货币单位 `Math.round` 取整。边界测试覆盖 NT$989、990、999、1000，以及 WEB/AI 和拆单。
 
-## 7. 订单记录创建（本期不实现支付与履约）
+## 7. 订单创建、库存消费与支付边界
 
-- 用户点击结账页“付款”后，服务端创建并持久化一条订单记录；不接入支付渠道、不执行扣款，不实现物流、发货、收货、退货、退款或其他订单履约流程。
-- `POST /api/v1/carts/order` 输入购物车凭证、版本、报价 ID 和幂等键；服务端从 session 获取用户身份，验证授权、购物车和报价，事务写入一条订单记录及商品快照。
-- 重复提交相同幂等键和相同下单参数返回原订单；相同幂等键用于不同参数时返回冲突。订单列表与详情只查询当前用户自己的记录。
-- 本期不创建支付单或履约状态，不执行库存扣减、支付、扣款、物流、发货、收货、退货、退款及异步履约事件。
+- 用户点击结账页“付款”后，服务端创建并持久化一条订单记录，并在同一事务中扣减本次有效库存预留对应的 `on_hand` 与 `reserved` 数量；不接入支付渠道、不执行资金扣款，不实现物流、发货、收货、退货、退款或其他订单履约流程。
+- `POST /api/v1/carts/order` 与 AI commerce 下单工具共享订单服务。服务端从 session 获取用户身份，验证授权、购物车、报价及预留状态/数量/有效期，然后原子地写入订单快照、将预留状态更新为 `CONSUMED`、写入 `CONSUMED` 库存事件并更新库存余额。所有操作在同一 InnoDB 事务提交或回滚。
+- 重复提交相同幂等键和相同下单参数返回原订单，不重复扣减库存；相同幂等键用于不同参数时返回冲突。订单列表与详情只查询当前用户自己的记录。
+- 迁移 `009_consume_inventory_on_order.sql` 将预留与事件枚举扩展为支持 `CONSUMED`。本期不创建支付单或履约状态，不执行资金扣款、物流、发货、收货、退货、退款及异步履约事件。
 
 ## 9. API 契约与访问控制
 

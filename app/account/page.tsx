@@ -4,33 +4,30 @@ import Link from "next/link";
 import { useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import { useAuth } from "@/components/auth-provider";
+import { showToast } from "@/lib/toast";
 
 export default function AccountPage() {
   const { user, loading, openLogin, authorize } = useAuth();
   const [saving, setSaving] = useState(false);
   const [consent, setConsent] = useState(false);
-  const [error, setError] = useState("");
 
   async function saveAuthorization() {
     if (!consent) return;
     setSaving(true);
-    setError("");
     try {
       await authorize();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "授权失败");
+    } catch {
+      showToast("授权失败，请稍后重试。");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <PageShell eyebrow="M7 我的" title="我的" description="从这里查看本人创建的订单记录和下单授权。">
+    <div className="account-page">
       <section className="section auth-card">
         <div>
-          <p className="eyebrow">M1 身份与授权</p>
           <h2>AI 自助下单授权</h2>
-          <p className="muted">授权后，AI 助手可以代为创建订单记录；本期不接入支付或扣款。</p>
         </div>
         {loading ? (
           <p className="muted">正在读取登录状态…</p>
@@ -53,11 +50,6 @@ export default function AccountPage() {
               />{" "}
               <span>同意 AI 助手代为创建订单记录</span>
             </label>
-            {error ? (
-              <p className="form-error" role="alert">
-                {error}
-              </p>
-            ) : null}
             <button
               className="button button--primary"
               type="button"
@@ -76,6 +68,6 @@ export default function AccountPage() {
           </Link>
         ))}
       </div>
-    </PageShell>
+    </div>
   );
 }
