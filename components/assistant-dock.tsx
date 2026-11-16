@@ -239,6 +239,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
       }
       const quote = await quoteAiCart(cart.cartVersion);
       const order = await submitAiOrder(cart.cartVersion, quote.quote.quoteId);
+      const allocatedQuantity = cart.allocations.reduce((sum, item) => sum + item.allocatedQuantity, 0);
       try {
         const refreshed = await refreshProductAfterOrder(product.id);
         if (!refreshed) showToast("订单已建立，但商品库存刷新失败，请稍后刷新页面。");
@@ -248,7 +249,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
       setOrderReceipt({
         orderGroupId: order.orderGroupId,
         productName: product.name,
-        quantity: aiQuantity,
+        quantity: allocatedQuantity,
         unitPrice: product.price,
         subtotalMinor: quote.quote.subtotalMinor,
         discountMinor: quote.quote.discountMinor,
@@ -553,7 +554,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
                   </p>
                 </div>
                 <strong>
-                  NT${(orderReceipt.unitPrice * orderReceipt.quantity).toLocaleString()}
+                  {formatMinor(orderReceipt.subtotalMinor)}
                 </strong>
               </div>
               <div className="cart-summary__line">

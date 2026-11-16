@@ -10,7 +10,6 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:m3": "node --experimental-strip-types --no-warnings scripts/m3-domain-check.ts",
     "format": "prettier --write ."
   },
   "dependencies": {
