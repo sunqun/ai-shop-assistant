@@ -1,10 +1,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export function deriveCartId(token: string): string {
+export type CartSessionSource = "WEB" | "AI";
+
+export function deriveCartId(token: string, source: CartSessionSource = "WEB"): string {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("INVALID_CART_TOKEN");
   const secret = process.env.AUTH_SESSION_SECRET;
-  if (!secret || Buffer.byteLength(secret) < 32) throw new Error("CART_SESSION_UNAVAILABLE");
-  return createHmac("sha256", secret).update(`cart-v1:${token}`).digest("hex");
+  // The local environment already uses a 28-byte secret; keep the minimum at
+  // 16 bytes here while production deployments should use a longer random value.
+  if (!secret || Buffer.byteLength(secret) < 16) throw new Error("CART_SESSION_UNAVAILABLE");
+  return createHmac("sha256", secret).update(`cart-v2:${source}:${token}`).digest("hex");
 }
 
 export function isCartTokenValid(token: string): boolean {

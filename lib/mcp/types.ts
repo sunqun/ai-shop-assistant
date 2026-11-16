@@ -4,7 +4,7 @@
  * 这里使用进程内传输，保持与未来独立 MCP Server 的 JSON-RPC/HTTP 传输
  * 兼容：调用方只依赖工具名、参数和结构化结果，不依赖数据库实现。
  */
-export type McpToolName = "catalog.search_products";
+export type McpToolName = "catalog.search_products" | "commerce.ai_reconcile_cart" | "commerce.ai_quote_cart" | "commerce.ai_submit_order";
 
 export type McpError = {
   code: string;
@@ -18,7 +18,13 @@ export type McpToolResult<T> =
 
 export type McpToolCall<TName extends McpToolName = McpToolName> = {
   name: TName;
-  arguments: TName extends "catalog.search_products" ? CatalogSearchToolInput : never;
+  arguments: TName extends "catalog.search_products"
+    ? CatalogSearchToolInput
+    : TName extends "commerce.ai_reconcile_cart"
+      ? AiReconcileCartToolInput
+      : TName extends "commerce.ai_quote_cart"
+        ? AiQuoteCartToolInput
+        : AiSubmitOrderToolInput;
 };
 
 export type CatalogSearchToolInput = {
@@ -28,4 +34,44 @@ export type CatalogSearchToolInput = {
 };
 
 export type CatalogSearchToolOutput = import("@/lib/catalog").ProductSearchPage;
+
+export type AiCartItemInput = { id: string; quantity: number };
+export type AiReconcileCartToolInput = {
+  cartToken: string;
+  items: AiCartItemInput[];
+  idempotencyKey: string;
+};
+export type AiQuoteCartToolInput = { cartToken: string; cartVersion: number };
+export type AiSubmitOrderToolInput = {
+  cartToken: string;
+  cartVersion: number;
+  quoteId: string;
+  idempotencyKey: string;
+};
+export type AiCartToolOutput = import("@/lib/cart-service").ReconcileCartResult;
+export type AiQuoteToolOutput = {
+  quote: {
+    quoteId: string;
+    cartId: string;
+    cartVersion: number;
+    currency: "TWD";
+    subtotalMinor: number;
+    discountMinor: number;
+    shippingMinor: number;
+    totalDueMinor: number;
+    promotion: string;
+    label: string;
+    ruleVersion: string;
+    expiresAt: string;
+  };
+  appliedRules: string[];
+};
+export type AiOrderToolOutput = {
+  orderGroupId: string;
+  source: "AI";
+  settlementStatus: "NOT_DUE";
+  splitSummary: { split: boolean; shortageItems: Array<{ skuId: string; quantity: number }> };
+  orders: Array<{ orderId: string; fulfillmentStatus: "PLACED"; settlementStatus: "NOT_DUE" }>;
+  audit: { provenance: "assistant"; userId: string };
+};
 

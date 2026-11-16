@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import type { CatalogProduct } from "@/lib/catalog";
+import { addToCartAndPersist } from "@/lib/cart-client";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ productId: string }> }) {
   const { productId } = use(params);
@@ -11,6 +12,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
   const [state, setState] = useState<"loading" | "ready" | "notfound" | "error">("loading");
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addMessage, setAddMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -79,26 +82,25 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
 
   const currentProduct = product;
 
-  function add() {
-    let current: Array<{ id: string; quantity: number; sku?: string }> = [];
-    try {
-      const parsed = JSON.parse(window.localStorage.getItem("ai-shop-cart") || "[]");
-      if (Array.isArray(parsed)) current = parsed;
-    } catch {
-      current = [];
-    }
+  async function add() {
     const selectedQuantity = Math.max(1, Math.min(quantity, currentProduct.stock));
     const firstSpec = Object.keys(currentProduct.specs)[0];
-    const existing = current.find((item) => item.id === currentProduct.id);
-    if (existing) {
-      existing.quantity = Math.min(existing.quantity + selectedQuantity, currentProduct.stock);
-      existing.sku = firstSpec;
-    } else {
-      current.push({ id: currentProduct.id, quantity: selectedQuantity, sku: firstSpec });
+    setAdding(true);
+    setAddMessage("");
+    try {
+      const result = await addToCartAndPersist(
+        { id: currentProduct.id, quantity: selectedQuantity, sku: currentProduct.id },
+        currentProduct.stock,
+      );
+      setAdded(true);
+      setAddMessage(
+        result.reachedLimit ? "已达到库存上限，已加入可用数量。" : "已加入购物车。",
+      );
+    } catch (error) {
+      setAddMessage(error instanceof Error ? error.message : "加入购物车失败，请稍后重试。");
+    } finally {
+      setAdding(false);
     }
-    window.localStorage.setItem("ai-shop-cart", JSON.stringify(current));
-    window.dispatchEvent(new CustomEvent("cart-updated"));
-    setAdded(true);
   }
 
   const specs = Object.entries(currentProduct.specs);
@@ -151,10 +153,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ produc
           <button
             className={added ? "button button--added" : "button button--primary"}
             onClick={add}
-            disabled={!currentProduct.stock}
+            disabled={!currentProduct.stock || adding}
           >
-            {added ? "已加入购物车" : "加入购物车"}
+            {adding ? "处理中…" : added ? "已加入购物车" : "加入购物车"}
           </button>
+          {addMessage ? <p className="notice" role="status" aria-live="polite">{addMessage}</p> : null}
           <Link className="button button--ghost" href="/">
             返回商品列表
           </Link>

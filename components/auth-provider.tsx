@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 export type AuthUser = { userid: string; username: string; isAuthorized: boolean };
 
@@ -17,6 +17,8 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+type AuthRetryRequest = { resume: () => void; cancel: () => void };
+const AUTH_REQUIRED_EVENT = "auth-required";
 
 async function readError(response: Response, fallback: string): Promise<string> {
   try {
@@ -31,6 +33,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [loginOpen, setLoginOpen] = useState(false);
+  const pendingAuthRetry = useRef<AuthRetryRequest | null>(null);
+
+  useEffect(() => {
+    const handleAuthRequired = (event: Event) => {
+      const request = (event as CustomEvent<AuthRetryRequest>).detail;
+      pendingAuthRetry.current?.cancel();
+      pendingAuthRetry.current = request;
+      setLoginOpen(true);
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+  }, []);
+
+  const closeLogin = useCallback(() => {
+    pendingAuthRetry.current?.cancel();
+    pendingAuthRetry.current = null;
+    setLoginOpen(false);
+  }, []);
+
+  const resumePendingAuthRetry = useCallback(() => {
+    const request = pendingAuthRetry.current;
+    pendingAuthRetry.current = null;
+    request?.resume();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,8 +91,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const body = (await response.json()) as { user: AuthUser };
       setUser(body.user);
       setLoginOpen(false);
+      resumePendingAuthRetry();
     },
-    []
+    [resumePendingAuthRetry]
   );
 
   const register = useCallback(
@@ -81,8 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const body = (await response.json()) as { user: AuthUser };
       setUser(body.user);
       setLoginOpen(false);
+      resumePendingAuthRetry();
     },
-    []
+    [resumePendingAuthRetry]
   );
 
   const logout = useCallback(async () => {
@@ -109,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         loginOpen,
         openLogin: () => setLoginOpen(true),
-        closeLogin: () => setLoginOpen(false),
+        closeLogin,
         login,
         register,
         logout,

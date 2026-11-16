@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
+import { addToCartAndPersist } from "@/lib/cart-client";
 
 const PAGE_SIZE = 20;
 
@@ -12,23 +13,6 @@ type PromotionRule = {
   label: string;
   status: "configured" | "needs_human_review";
 };
-
-function addToCart(product: CatalogProduct) {
-  let current: Array<{ id: string; quantity: number; sku?: string }> = [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem("ai-shop-cart") || "[]");
-    if (Array.isArray(parsed)) current = parsed;
-  } catch {
-    current = [];
-  }
-  const existing = current.find((item) => item.id === product.id);
-  const reachedLimit = existing ? existing.quantity >= product.stock : false;
-  if (existing) existing.quantity = Math.min(existing.quantity + 1, product.stock);
-  else current.push({ id: product.id, quantity: 1, sku: Object.keys(product.specs)[0] });
-  window.localStorage.setItem("ai-shop-cart", JSON.stringify(current));
-  window.dispatchEvent(new CustomEvent("cart-updated"));
-  return !reachedLimit;
-}
 
 export default function HomePage() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -39,6 +23,7 @@ export default function HomePage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [addMessage, setAddMessage] = useState("");
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [promotionRules, setPromotionRules] = useState<PromotionRule[]>([]);
   const [promotionState, setPromotionState] = useState<"loading" | "ready" | "error">("loading");
   const [reload, setReload] = useState(0);
@@ -128,12 +113,25 @@ export default function HomePage() {
   }, [filteredProducts.length]);
 
   const visibleProducts = filteredProducts.slice(0, visibleCount);
-  function handleAdd(product: CatalogProduct) {
+  async function handleAdd(product: CatalogProduct) {
     if (!product.stock) return;
-    const added = addToCart(product);
-    setAddedId(product.id);
-    setAddMessage(added ? `${product.name} 已加入购物车` : `${product.name} 已达到库存上限`);
-    window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1800);
+    setAddingId(product.id);
+    setAddMessage("");
+    try {
+      const result = await addToCartAndPersist(
+        { id: product.id, quantity: 1, sku: product.id },
+        product.stock,
+      );
+      setAddedId(product.id);
+      setAddMessage(
+        result.reachedLimit ? `${product.name} 已达到库存上限` : `${product.name} 已加入购物车`,
+      );
+      window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1800);
+    } catch (error) {
+      setAddMessage(error instanceof Error ? error.message : "加入购物车失败，请稍后重试。");
+    } finally {
+      setAddingId(null);
+    }
   }
 
   return (
@@ -232,6 +230,7 @@ export default function HomePage() {
                     key={product.id}
                     product={product}
                     added={addedId === product.id}
+                    adding={addingId === product.id}
                     onAdd={handleAdd}
                   />
                 ))}
@@ -268,11 +267,13 @@ export default function HomePage() {
 function ProductCard({
   product,
   added,
+  adding,
   onAdd,
 }: {
   product: CatalogProduct;
   added: boolean;
-  onAdd: (product: CatalogProduct) => void;
+  adding: boolean;
+  onAdd: (product: CatalogProduct) => void | Promise<void>;
 }) {
   const specs = Object.entries(product.specs);
   return (
@@ -305,10 +306,10 @@ function ProductCard({
           <button
             className={added ? "button button--added" : "button button--primary"}
             type="button"
-            disabled={!product.stock}
+            disabled={!product.stock || adding}
             onClick={() => onAdd(product)}
           >
-            {added ? "已加入" : "加入购物车"}
+            {adding ? "处理中…" : added ? "已加入" : "加入购物车"}
           </button>
         </div>
       </div>

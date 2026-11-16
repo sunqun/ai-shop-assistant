@@ -67,13 +67,18 @@ function fallbackIntent(query: string): ProductSearchIntent {
 function normalizeIntent(value: unknown): ProductSearchIntent {
   // 模型输出只作为候选条件，先做类型、长度和数值范围校验，再交给数据库查询。
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const keywords = stringList(source.keywords);
+  const category = typeof source.category === "string" ? source.category.trim().slice(0, 80) || undefined : undefined;
   const minPrice = clampNumber(source.minPrice, 0, 10_000_000);
   const maxPrice = clampNumber(source.maxPrice, 0, 10_000_000);
   const normalizedMin = minPrice !== undefined && maxPrice !== undefined ? Math.min(minPrice, maxPrice) : minPrice;
   const normalizedMax = minPrice !== undefined && maxPrice !== undefined ? Math.max(minPrice, maxPrice) : maxPrice;
   return {
-    keywords: stringList(source.keywords),
-    category: typeof source.category === "string" ? source.category.trim().slice(0, 80) || undefined : undefined,
+    keywords,
+    // 同一词被模型重复标成品类和商品词时，只保留商品词；否则数据库会再要求分类名也匹配该词。
+    category: category && keywords.some((keyword) => keyword.toLocaleLowerCase() === category.toLocaleLowerCase())
+      ? undefined
+      : category,
     brand: typeof source.brand === "string" ? source.brand.trim().slice(0, 80) || undefined : undefined,
     minPrice: normalizedMin,
     maxPrice: normalizedMax,

@@ -252,6 +252,16 @@ export async function getCatalogProduct(productId: string): Promise<CatalogProdu
   return rows.length ? mapProduct(rows[0]) : null;
 }
 
+export async function getCatalogProducts(productIds: string[]): Promise<Map<string, CatalogProduct>> {
+  const ids = [...new Set(productIds)];
+  if (!ids.length) return new Map();
+  const [rows] = await getDbPool().query<ProductRow[]>(
+    `${PRODUCT_SELECT} WHERE p.product_id IN (?) ${PRODUCT_GROUP}`,
+    [ids]
+  );
+  return new Map(rows.map((row) => [row.product_id, mapProduct(row)]));
+}
+
 function redactText(value: string): string {
   // 评论接口只返回公开视图，先清理常见联系方式和地址片段。
   return value
