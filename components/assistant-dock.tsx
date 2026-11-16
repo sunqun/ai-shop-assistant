@@ -90,7 +90,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
     setReviewCursor(null);
     setReviewState("loading");
     try {
-      const response = await fetch(`/api/v1/products/${encodeURIComponent(product.id)}/reviews?pageSize=20`, {
+      const response = await fetch(`/api/v1/products/reviews?productId=${encodeURIComponent(product.id)}&pageSize=20`, {
         cache: "no-store",
       });
       if (!response.ok) throw new Error("reviews request failed");
@@ -108,7 +108,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
     setReviewState("loading");
     try {
       const response = await fetch(
-        `/api/v1/products/${encodeURIComponent(reviewProduct.id)}/reviews?pageSize=20&cursor=${encodeURIComponent(reviewCursor)}`,
+        `/api/v1/products/reviews?productId=${encodeURIComponent(reviewProduct.id)}&pageSize=20&cursor=${encodeURIComponent(reviewCursor)}`,
         { cache: "no-store" }
       );
       if (!response.ok) throw new Error("reviews request failed");
@@ -150,7 +150,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
     } catch (error) {
       const code = (error as Error & { code?: string }).code;
       setAiOrderState("error");
-      setAiMessage(code === "UNAUTHENTICATED" ? "请先登录后再下单。" : code === "AUTHORIZATION_REQUIRED" ? "请先完成“同意AI自助下单，收货后自动扣款”授权。" : error instanceof Error ? error.message : "下单暂时无法完成，请重新校验库存和报价。");
+      setAiMessage(code === "UNAUTHENTICATED" ? "请先登录后再创建订单记录。" : code === "AUTHORIZATION_REQUIRED" ? "请先在“我的”中授权 AI 助手创建订单记录。" : error instanceof Error ? error.message : "订单记录暂时无法创建，请重新校验库存和报价。");
     }
   }
 
@@ -252,13 +252,13 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
             <article className="assistant-result" key={product.id}>
               <span className="assistant-result__swatch">{product.name.slice(0, 1)}</span>
               <span className="assistant-result__content">
-                <Link href={`/products/${product.id}`} className="assistant-result__title">{product.name}</Link>
+                <Link href={`/products/detail?productId=${encodeURIComponent(product.id)}`} className="assistant-result__title">{product.name}</Link>
                 <small>{product.category} · {product.brand || "品牌信息待补充"}</small>
                 <small>{product.currency}{product.price.toLocaleString()} · {product.stock ? `库存 ${product.stock}` : "暂时缺货"}</small>
                 <small>{product.rating ? `★ ${product.rating}` : "暂无评分"} · {product.reviewCount} 条评论</small>
                 <span className="assistant-result__actions">
                   <label className="assistant-quantity">数量 <input type="number" min={1} max={99} value={aiQuantity} onChange={(event) => setAiQuantity(Math.max(1, Math.min(99, Number(event.target.value) || 1)))} /></label>
-                  <Link href={`/products/${product.id}`} className="assistant-text-link">查看规格</Link>
+                  <Link href={`/products/detail?productId=${encodeURIComponent(product.id)}`} className="assistant-text-link">查看规格</Link>
                   <button type="button" className="assistant-text-link" onClick={() => void openReviews(product)}>查看评论</button>
                   <button type="button" className="assistant-text-link" onClick={() => void confirmAiProduct(product)} disabled={aiCartState === "loading"}>选入 AI 购物车</button>
                 </span>
@@ -296,10 +296,10 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
             {aiCart.allocations.map((item) => <p className="assistant-ai-cart__line" key={item.skuId}>SKU {item.skuId}：锁定 {item.allocatedQuantity}，缺货 {item.unavailableQuantity}</p>)}
             {aiCart.split ? <p className="assistant-ai-cart__notice">部分商品缺货，本次只会为已锁定数量建单。</p> : null}
             {aiCart.fullyOutOfStock ? <p className="assistant-ai-cart__notice">当前商品暂时无库存，请稍后重试。</p> : null}
-            {aiQuote ? <div className="assistant-ai-cart__quote"><span>报价 {aiQuote.label}</span><strong>{aiQuote.currency} {(aiQuote.totalDueMinor / 100).toLocaleString()}</strong><small>收货后扣款，报价有效至 {new Date(aiQuote.expiresAt).toLocaleString()}</small></div> : null}
+            {aiQuote ? <div className="assistant-ai-cart__quote"><span>报价 {aiQuote.label}</span><strong>{aiQuote.currency} {(aiQuote.totalDueMinor / 100).toLocaleString()}</strong><small>仅用于创建订单记录，报价有效至 {new Date(aiQuote.expiresAt).toLocaleString()}</small></div> : null}
             {aiMessage ? <p className="assistant-empty" role="alert">{aiMessage}</p> : null}
             {aiOrderState === "done" ? <p className="assistant-ai-cart__success">订单已建立，订单组 {aiOrderId}，本次未扣款。</p> : null}
-            {aiQuote && aiOrderState !== "done" ? <button className="button assistant-ai-cart__submit" type="button" onClick={() => void placeAiOrder()} disabled={aiOrderState === "loading"}>{aiOrderState === "loading" ? "正在提交..." : "确认下单，收货后扣款"}</button> : null}
+            {aiQuote && aiOrderState !== "done" ? <button className="button assistant-ai-cart__submit" type="button" onClick={() => void placeAiOrder()} disabled={aiOrderState === "loading"}>{aiOrderState === "loading" ? "正在创建..." : "创建订单记录"}</button> : null}
           </section>
         ) : null}
         <p className="assistant-disclaimer">商品信息、库存和评论来自服务端实时查询。</p>

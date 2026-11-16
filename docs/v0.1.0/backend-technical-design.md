@@ -46,7 +46,7 @@ flowchart LR
 | `inventory_reservations`                                   | cart_id、sku_id、qty、expires_at、status                                           | 状态 ACTIVE/COMMITTED/RELEASED；按过期时间索引                                                                                                 |
 | `carts`、`cart_items`、`cart_allocations`                  | 来源、版本、原需求、锁定数量、缺货数量                                             | 需求量 = 本次分配量 + 缺货量；来源由后端判定                                                                                                   |
 | `quotes`                                                   | cart_version、rule_version、金额、拆分方案、expires_at                             | 不可被客户端金额覆盖；建单校验版本                                                                                                             |
-| `order_groups`、`orders`、`order_items`                    | 原始购物意图、子单、商品/价格快照、授权快照                                        | 同一下单意图只能成功一次；子单来源继承父单；仅作为订单记录落库，不进入履约/结算状态                                     |
+| `order_groups`、`orders`、`order_items`                    | 一次下单请求、单条订单记录、商品/价格快照                                        | 同一下单意图只能成功一次；仅作为订单记录落库，不进入支付或履约状态                                     |
 | `reviews`、`review_public_views`                           | 原始受限数据与脱敏文本/媒体                                                        | 公开接口只读已发布且脱敏完成的视图                                                                                                             |
 | `handoff_links`                                            | token_hash、绑定资源、revoked_at                                                   | token 哈希唯一；无自动过期不等于资源无生命周期                                                                                                 |
 | `promotion_rules`、`pricing_allocations`                   | 组合、门槛、舍入、规则版本及逐项分摊                                               | 总分摊 = 订单优惠；规则变更不改历史订单                                                                                                        |
@@ -60,7 +60,7 @@ flowchart LR
 
 ### 4.1 登录接口与字段写入
 
-- `POST /api/v1/auth/login` 输入 `{ username, password, authorizationConsent }`。`authorizationConsent` 对应首页登录弹窗中“同意AI自助下单，收货后自动扣款”的 checkbox，默认值为 `false`；已授权用户前端不显示该 checkbox，服务端仍以数据库字段为准。
+- `POST /api/v1/auth/login` 输入 `{ username, password, authorizationConsent }`。`authorizationConsent` 对应首页登录弹窗中“同意 AI 助手代为创建订单记录”的 checkbox，默认值为 `false`；已授权用户前端不显示该 checkbox，服务端仍以数据库字段为准。该字段不构成支付或扣款授权。
 - 服务端先校验用户名和密码；认证成功后建立网页 session。仅当 `authorizationConsent=true` 且当前 `is_authorized=false` 时，才将 `users.is_authorized` 更新为 `true`。未勾选仍可登录；本期不实现 `true -> false`。
 - 登录成功返回 `{ user: { userid, username, isAuthorized }, session: { expiresAt } }`；返回的授权状态必须来自数据库。登录失败不创建 session、不修改授权字段。
 - 密码使用经审查的自适应密码哈希算法和每用户唯一 salt；明文密码不得入库、日志、审计事件或分析事件。认证错误避免泄露用户名是否存在。
@@ -76,7 +76,7 @@ flowchart LR
 
 - 所有来源和入口的建单请求都必须有有效登录 session，并由服务端解析 `userid`、读取 `users.is_authorized`；不得信任客户端 body、query 或缓存中的授权布尔值。交接凭证只允许查看绑定内容，不能创建匿名订单或绕过此检查。
 - 缺少或无效 session 返回 401；已登录但 `is_authorized=false` 返回 403 `AUTHORIZATION_REQUIRED`。两种情况均不得创建订单记录。字段为 `true` 时才可继续订单校验和创建。
-- 当前授权字段是“同意AI自助下单，收货后自动扣款”的产品同意状态，不保存支付代扣凭证；本期不提供撤销/更新入口，也不处理撤销对存量订单的影响。不得仅凭该字段实现具体支付渠道的代扣接入。
+- 当前授权字段只表示允许 AI 助手创建订单记录，不保存支付凭证；不得将其作为支付或扣款授权。本期不提供撤销/更新入口。
 - 审计记录登录成功/失败及 `is_authorized` 字段变更的主体、时间、来源请求 ID 和变更前后值；不得记录密码、session 原文或敏感凭据。
 - 登录 session Cookie 配置 HttpOnly、Secure、SameSite，并落实 CSRF 防护、登录限流和 session 撤销；会话存储方案按项目实际部署确认。
 
@@ -91,9 +91,11 @@ flowchart LR
 5. 库存事务提交后通过 outbox 持久化拆分提醒。网页持久 Alert、Agent 响应、订单回执都展示相同明细；提醒投递失败可重试，不能静默丢失。
 6. Redis 只缓存查询结果；到期任务以 MySQL ACTIVE 预留为依据，通过状态条件更新保证只释放一次。
 
-### 5.2 建单和父子单
+### 5.2 M6/M7 订单记录范围
 
-- 报价、拆单和实际建单要使用同一购物车版本。所有建单事务都必须验证登录用户的 `is_authorized=true`，并校验 cart、quote、reservation 和 inventory 的有效期、数量及报价规则；该检查覆盖网页、AI 和交接来源。
+- 本期网站结账点击“付款”只创建一条订单记录。服务端验证 session、授权、购物车版本和有效报价后，在同一 MySQL 事务写入 `order_groups`、`orders`、`order_items` 和创建审计，并以用户 + 幂等键确保重试返回同一订单。
+- 建单不拆分多个子订单，不提交或扣减库存，不发起支付或扣款，不触发物流、发货、收货、退货、退款、通知或其他履约动作。
+- M7 列表和详情使用 session 中的 `userid` 限定查询范围。响应只含订单标识、来源、创建时间、商品及金额摘要，不输出结算或履约状态。
 
 ### M3 已实现接口契约
 
@@ -101,9 +103,7 @@ flowchart LR
 - `POST /api/v1/carts/quote` 接收 `{ cartToken, cartVersion }`，只读取服务端已锁定数量和可信商品价格，自动返回 `quoteId`、商品小计、总折扣、运费、总应付、`appliedRules`、规则版本和有效期。前端不提交优惠选择；购物车版本变化、锁定过期、全部缺货分别返回 `CART_CHANGED`、`CART_RESERVATION_EXPIRED`、`OUT_OF_STOCK`。
 - `POST /api/internal/inventory/expire` 由带 `Bearer INVENTORY_CRON_SECRET` 的定时任务调用，批量把到期 ACTIVE 预留改为 `EXPIRED`、归还 `inventory_skus.reserved` 并写入事件审计；接口不对前台开放。
 - 当前 WEB reconcile 固定来源为 `WEB`；M5 AI 购物车来源和 C 优惠由 M5 可信下单入口接入。A 与 B 自动叠加，AI 下单来源在此基础上再叠加 C；门槛使用折前商品小计，C 只折 AI 商品，免运按整购物车计算；前台按 NT$ 整数显示。
-- 通过后创建父订单组及有库存子单，并持久化为订单记录。本期不接入支付渠道、不执行扣款，不自动收款或承诺发货时间。
-- ACTIVE 预留转 COMMITTED，同时 `on_hand -= qty`、`reserved -= qty`，按“on_hand 表示尚未分配给已下订单的库存”的定义扣除一次。
-- 建单与到期释放竞争时对同一预留行串行处理，只有一个状态迁移成功。下单后的 COMMITTED 记录不再被 24 小时回收任务释放。
+- 报价与库存校验由 M3 购物车/报价链路完成；M6 建单记录关联有效报价快照。本期不在建单事务中提交库存预留或改变库存数量。
 - 优惠分摊与运费计算放在父级报价体系内；A/B 门槛和免运按整车折前商品小计判断，拆单不得改变优惠资格或重复收取运费。费用归属需显式记录。
 
 ## 6. 自动报价引擎
@@ -120,25 +120,28 @@ flowchart LR
 
 门槛统一按折前商品小计判断。WEB 商品小计 NT$1,000 时，A/B 同时命中：商品折扣 NT$100、运费 NT$0，应付 NT$900。AI 自动建单来源在此基础上对 AI 商品金额额外应用 C；C 不折运费，折扣结果按最小货币单位 `Math.round` 取整。边界测试覆盖 NT$989、990、999、1000，以及 WEB/AI 和拆单。
 
-## 7. 订单记录创建（本期不实现履约与扣款）
+## 7. 订单记录创建（本期不实现支付与履约）
 
 - 用户点击结账页“付款”后，服务端创建并持久化一条订单记录；不接入支付渠道、不执行扣款，不实现物流、发货、收货、退货、退款或其他订单履约流程。
-- 订单记录创建必须验证登录用户和 `users.is_authorized=true`，校验报价与库存快照，并以幂等键保证同一下单意图只成功一次。
+- `POST /api/v1/carts/order` 输入购物车凭证、版本、报价 ID 和幂等键；服务端从 session 获取用户身份，验证授权、购物车和报价，事务写入一条订单记录及商品快照。
+- 重复提交相同幂等键和相同下单参数返回原订单；相同幂等键用于不同参数时返回冲突。订单列表与详情只查询当前用户自己的记录。
+- 本期不创建支付单或履约状态，不执行库存扣减、支付、扣款、物流、发货、收货、退货、退款及异步履约事件。
 
 ## 9. API 契约与访问控制
 
 ### 9.1 网页/交接接口
 
-与前端文档接口表一致；报价接口返回 `quote` 和 `splitSummary`，建单返回 `orderGroupId`、子单、缺货项和购买快照。
+与前端文档接口表一致；建单返回 `orderGroupId` 和订单标识，不返回支付、结算、物流或履约状态。
 
 - 身份：`POST /api/v1/auth/login`、`POST /api/v1/auth/register`、`GET /api/v1/auth/session`。
 - 注册：请求 `{ username, password, confirmPassword }`；服务端 trim 用户名、校验用户名非空和密码至少 8 个字符，使用 `scrypt` 哈希后写入 `users`，服务端生成 UUID `userid`，`is_authorized` 固定为 `false`，成功后建立网页 session 并返回用户摘要。唯一用户名约束处理并发重复注册，冲突返回 HTTP 409 `USERNAME_ALREADY_EXISTS`；格式或校验失败返回 400；数据库不可用返回 503，不暴露 SQL 细节。
 - 授权状态由 `POST /api/v1/auth/login` 的 checkbox 或 `POST /api/v1/me/authorization` 写入，并通过登录响应及 `GET /api/v1/auth/session` 读取；M1 不提供撤销/更新接口。
 - 商品：`GET /api/v1/products`、`GET /api/v1/products/:id`、`GET /api/v1/products/:id/reviews`。
 - 网页助手（服务端编排 Agent）：`POST /api/v1/assistant/search` 接收自然语言查询，服务端先做意图识别，再编排只读工具（商品目录、规格/库存、本人历史订单、脱敏评论、报价摘要、授权读取）；按内部符合度分流返回：符合度 > 80% 返回单一最优商品及可追溯理由，否则返回相关商品列表（cursor 分页，pageSize 默认 20、最大 100）。与网页目录搜索共享商品、推荐和脱敏评论查询能力。
-- 购物车：`POST /api/v1/carts`、`PATCH /api/v1/carts/:id/items`、`POST /api/v1/carts/:id/quotes`、`POST /api/v1/carts/:id/orders`。
+- 购物车：`POST /api/v1/carts`、`PATCH /api/v1/carts/:id/items`、`POST /api/v1/carts/:id/quotes`。
+- 建单：`POST /api/v1/carts/order`，只创建一条订单记录并返回订单编号。
 - 交接：`POST /api/v1/carts/:id/handoff-links`、`POST /api/v1/handoff/exchange`。
-- 订单：`GET /api/v1/order-groups/:id`。
+- 订单：订单详情通过 `GET /api/v1/me/orders/:id` 查询，仅允许当前用户读取。
 - 我的：`GET /api/v1/me/overview`、`GET /api/v1/me/orders`。
 - 我的授权：`POST /api/v1/me/authorization`，仅支持 `false -> true`，不提供撤销。
 
@@ -159,7 +162,7 @@ Agent 端无收货确认/代扣权限。若未来提供外部 Agent API，其客
 ### 9.3 一致响应与幂等
 
 - 错误：`{code, message, requestId, fieldErrors?, details?}`；无效登录返回通用认证错误；未登录或 session 无效返回 401；已登录但授权字段为 `false` 返回 403 `AUTHORIZATION_REQUIRED` 且不建单；旧报价 409 `QUOTE_CHANGED`，库存变化 409 `INVENTORY_CHANGED`，资源/链接撤销 410。
-- 部分缺货为成功业务响应并带拆分明细；全部缺货不生成订单记录。
+- 沿用购物车库存分配结果；没有可下单商品时不生成订单记录。
 - 幂等键按操作者、操作和 key 隔离，保存请求 payload hash；同 key 不同参数返回冲突。唯一业务约束防止短期幂等记录过期后重复建单。
 
 ## 10. 长期交接、评论脱敏与搜索

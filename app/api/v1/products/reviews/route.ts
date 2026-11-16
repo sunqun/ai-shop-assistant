@@ -4,12 +4,15 @@ import { getCatalogProduct, listProductReviews } from "@/lib/catalog";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ productId: string }> }
-) {
-  const { productId } = await params;
+export async function GET(request: Request) {
   const url = new URL(request.url);
+  const productId = url.searchParams.get("productId")?.trim();
+  if (!productId) {
+    return NextResponse.json(
+      { code: "PRODUCT_ID_REQUIRED", message: "缺少商品 ID。" },
+      { status: 400 }
+    );
+  }
   // 评论分页由服务端限制上限，防止一次请求拉取无界数据。
   const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize")) || 20));
   const cursor = url.searchParams.get("cursor") || undefined;

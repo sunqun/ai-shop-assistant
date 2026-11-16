@@ -281,7 +281,7 @@ function ProductCard({
       <div className="product-tile__body">
         <div className="product-tile__title-row">
           <h2 className="product-tile__name" title={product.name}>
-            <Link href={`/products/${product.id}`} title={product.name}>
+            <Link href={`/products/detail?productId=${encodeURIComponent(product.id)}`} title={product.name}>
               {product.name}
             </Link>
             <span className={`category-badge category-badge--${product.tone || "all"}`}>

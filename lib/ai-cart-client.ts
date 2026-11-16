@@ -43,6 +43,6 @@ export async function quoteAiCart(cartVersion: number) {
 export async function submitAiOrder(cartVersion: number, quoteId: string) {
   return runWithLoginRetry(async () => {
     const response = await fetch("/api/v1/assistant/order", { method: "POST", headers: { "content-type": "application/json" }, cache: "no-store", body: JSON.stringify({ cartToken: getAiCartToken(), cartVersion, quoteId, idempotencyKey: crypto.randomUUID() }) });
-    return readPayload(response) as Promise<{ orderGroupId: string; settlementStatus: "NOT_DUE"; orders: Array<{ orderId: string }> }>;
+    return readPayload(response) as Promise<{ orderGroupId: string; orders: Array<{ orderId: string }> }>;
   });
 }

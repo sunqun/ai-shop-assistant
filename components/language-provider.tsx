@@ -40,17 +40,17 @@ const labels: Record<Locale, Record<string, string>> = {
     去逛商品: "去逛商品",
     确认订单: "确认订单",
     "收货信息、拆单提醒、报价摘要和收货后扣款说明将在后续实现。":
-      "收货信息、拆单提醒、报价摘要和收货后扣款说明将在后续实现。",
+      "商品、报价和订单创建信息会在此确认；提交只创建订单记录，不会付款或扣款。",
     结账页面骨架: "结账页面骨架",
     "当前只提供页面入口，不创建订单、不锁库存、不发起扣款。":
-      "当前只提供页面入口，不创建订单、不锁库存、不发起扣款。",
+      "点击“付款”只会创建订单记录，不会发起支付或扣款。",
     返回购物车: "返回购物车",
     "登录 AI 商城": "登录 AI 商城",
     "登录表单和长期 AI 授权将在后续实现。": "登录表单和长期 AI 授权将在后续实现。",
     登录页面骨架: "登录页面骨架",
     "这里将承载登录、授权同意/拒绝和回跳状态。": "这里将承载登录、授权同意/拒绝和回跳状态。",
     查看我的页面: "查看我的页面",
-    "从这里查看订单、物流、退款和授权管理。": "从这里查看订单、物流、退款和授权管理。",
+    "从这里查看订单、物流、退款和授权管理。": "从这里查看本人订单记录和授权管理。",
     待处理订单: "待处理订单",
     运输中包裹: "运输中包裹",
     "退款/售后": "退款/售后",
@@ -58,9 +58,9 @@ const labels: Record<Locale, Record<string, string>> = {
     物流: "物流",
     退款与售后: "退款与售后",
     "AI 授权": "AI 授权",
-    "履约、物流、结算和退款状态将分别展示。": "履约、物流、结算和退款状态将分别展示。",
+    "履约、物流、结算和退款状态将分别展示。": "这里展示本人创建的订单记录。",
     暂无订单数据: "暂无订单数据",
-    "订单列表和状态筛选将在订单模块实现后接入。": "订单列表和状态筛选将在订单模块实现后接入。",
+    "订单列表和状态筛选将在订单模块实现后接入。": "创建订单后，订单记录会显示在这里。",
     "AI 授权管理": "AI 授权管理",
     "长期授权的查看、撤销和审计信息将在授权模块实现。":
       "长期授权的查看、撤销和审计信息将在授权模块实现。",
@@ -191,10 +191,10 @@ const labels: Record<Locale, Record<string, string>> = {
     去逛商品: "Browse products",
     确认订单: "Review order",
     "收货信息、拆单提醒、报价摘要和收货后扣款说明将在后续实现。":
-      "Delivery details, split-order notices, quote summary, and post-delivery charge details are planned.",
+      "Review items and quote before creating an order record. No payment or charge is made.",
     结账页面骨架: "Checkout placeholder",
     "当前只提供页面入口，不创建订单、不锁库存、不发起扣款。":
-      "This page is a placeholder. It does not create orders, reserve inventory, or charge payments.",
+      "Selecting “Pay” creates an order record only. No payment or charge is made.",
     返回购物车: "Back to cart",
     "登录 AI 商城": "Sign in to AI Shop",
     "登录表单和长期 AI 授权将在后续实现。":
@@ -204,7 +204,7 @@ const labels: Record<Locale, Record<string, string>> = {
       "Sign-in, authorization consent, and return navigation will appear here.",
     查看我的页面: "View account",
     "从这里查看订单、物流、退款和授权管理。":
-      "View orders, shipping, refunds, and authorizations here.",
+      "View your order records and authorization here.",
     待处理订单: "Pending orders",
     运输中包裹: "In-transit packages",
     "退款/售后": "Refunds / support",
@@ -213,10 +213,10 @@ const labels: Record<Locale, Record<string, string>> = {
     退款与售后: "Refunds & support",
     "AI 授权": "AI authorization",
     "履约、物流、结算和退款状态将分别展示。":
-      "Fulfillment, shipping, settlement, and refund statuses will be shown separately.",
+      "Your created order records appear here.",
     暂无订单数据: "No order data",
     "订单列表和状态筛选将在订单模块实现后接入。":
-      "Order lists and status filters will be added with the orders module.",
+      "Created order records appear here.",
     "AI 授权管理": "AI authorization management",
     "长期授权的查看、撤销和审计信息将在授权模块实现。":
       "Persistent authorization, revocation, and audit details are planned.",
@@ -271,7 +271,7 @@ const labels: Record<Locale, Record<string, string>> = {
     订单回执: "Order receipt",
     订单回执占位: "Order receipt placeholder",
     "当前不会创建真实订单，后续展示父订单、子订单和缺货项。":
-      "No real order is created. Parent orders, suborders, and unavailable items will be shown later.",
+      "An order record is created and saved. Payment and fulfillment are not connected.",
     查看订单详情: "View order details",
     退货申请占位: "Return request placeholder",
     "退货选择、运费影响、退款和额外应收将在后续实现。":

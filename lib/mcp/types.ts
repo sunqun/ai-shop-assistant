@@ -69,9 +69,14 @@ export type AiQuoteToolOutput = {
 export type AiOrderToolOutput = {
   orderGroupId: string;
   source: "AI";
-  settlementStatus: "NOT_DUE";
-  splitSummary: { split: boolean; shortageItems: Array<{ skuId: string; quantity: number }> };
-  orders: Array<{ orderId: string; fulfillmentStatus: "PLACED"; settlementStatus: "NOT_DUE" }>;
+  orders: Array<{ orderId: string }>;
   audit: { provenance: "assistant"; userId: string };
+};
+
+export type WebOrderToolOutput = {
+  orderGroupId: string;
+  source: "WEB";
+  orders: Array<{ orderId: string }>;
+  audit: { provenance: "web"; userId: string };
 };
 

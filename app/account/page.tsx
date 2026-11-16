@@ -25,26 +25,12 @@ export default function AccountPage() {
   }
 
   return (
-    <PageShell eyebrow="M6 我的" title="我的" description="从这里查看订单、物流、退款和授权管理。">
-      <div className="status-grid">
-        <div className="status-card">
-          <p className="status-card__label">待处理订单</p>
-          <p className="status-card__value">--</p>
-        </div>
-        <div className="status-card">
-          <p className="status-card__label">运输中包裹</p>
-          <p className="status-card__value">--</p>
-        </div>
-        <div className="status-card">
-          <p className="status-card__label">退款/售后</p>
-          <p className="status-card__value">--</p>
-        </div>
-      </div>
+    <PageShell eyebrow="M7 我的" title="我的" description="从这里查看本人创建的订单记录和下单授权。">
       <section className="section auth-card">
         <div>
           <p className="eyebrow">M1 身份与授权</p>
           <h2>AI 自助下单授权</h2>
-          <p className="muted">授权后，后续下单流程将依据账户授权状态继续判断。</p>
+          <p className="muted">授权后，AI 助手可以代为创建订单记录；本期不接入支付或扣款。</p>
         </div>
         {loading ? (
           <p className="muted">正在读取登录状态…</p>
@@ -65,7 +51,7 @@ export default function AccountPage() {
                 checked={consent}
                 onChange={(event) => setConsent(event.target.checked)}
               />{" "}
-              <span>同意AI自助下单，收货后自动扣款</span>
+              <span>同意 AI 助手代为创建订单记录</span>
             </label>
             {error ? (
               <p className="form-error" role="alert">
@@ -84,11 +70,7 @@ export default function AccountPage() {
         )}
       </section>
       <div className="section route-map">
-        {[
-          ["订单", "/account/orders"],
-          ["物流", "/account/logistics"],
-          ["退款与售后", "/account/refunds"],
-        ].map(([label, href]) => (
+        {[["订单记录", "/account/orders"]].map(([label, href]) => (
           <Link className="route-link" href={href} key={href}>
             {label} →
           </Link>

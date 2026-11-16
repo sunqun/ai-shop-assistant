@@ -186,7 +186,7 @@ export default function CartPage() {
                 {product!.name.slice(0, 1)}
               </div>
               <div className="cart-row__content">
-                <Link href={`/products/${product!.id}`} className="cart-row__title">
+                <Link href={`/products/detail?productId=${encodeURIComponent(product!.id)}`} className="cart-row__title">
                   {product!.name}
                 </Link>
                 <span className="muted">规格：{item.sku || product!.specs[0]}</span>

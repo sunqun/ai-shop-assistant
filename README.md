@@ -1,6 +1,6 @@
-# AI 商城 Next.js 页面骨架
+# AI 商城
 
-当前版本只搭建网页商城的 Next.js App Router 结构和页面路由，页面使用静态占位数据，不接入登录、商品、购物车、订单或 AI 业务接口。
+Next.js App Router 网页商城。结账页点击“付款”会创建并持久化订单记录；本期不接入支付，也不处理物流、发货、收货、扣款、退货或退款。“我的”页面提供本人订单列表。
 
 ## 启动
 
@@ -18,8 +18,8 @@ npm run dev
 - `/products`、`/products/:productId` 商品列表和详情
 - `/cart`、`/checkout` 购物车和结账入口
 - `/handoff/:token` 交接入口
-- `/account`、`/account/orders`、`/account/logistics`、`/account/refunds`、`/account/authorizations` 我的中心
-- `/orders/:orderGroupId` 及其 `logistics`、`result`、`returns` 子页面
+- `/account`、`/account/orders` 我的中心及订单记录
+- `/orders/:orderGroupId` 订单记录详情与创建回执
 
 ## 验证
 
@@ -27,3 +27,5 @@ npm run dev
 npm run typecheck
 npm run build
 ```
+
+订单记录写入 MySQL，需先按 `db/migrations/` 初始化数据库并配置项目所需的数据库环境变量。

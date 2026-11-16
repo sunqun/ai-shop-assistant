@@ -279,7 +279,7 @@ function LoginDialog() {
                 checked={consent}
                 onChange={(event) => setConsent(event.target.checked)}
               />{" "}
-              <span>同意AI自助下单，收货后自动扣款</span>
+              <span>同意 AI 助手代为创建订单记录</span>
             </label>
           )}
           {error ? (
