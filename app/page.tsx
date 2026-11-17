@@ -6,15 +6,26 @@ import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
 import { addToCartAndPersist } from "@/lib/cart-client";
 import { showToast } from "@/lib/toast";
-import { ArrowRight, Check, Package, Search, ShoppingCart, Star, Tags, X } from "lucide-react";
+import {
+  AirVent,
+  Activity,
+  ArrowRight,
+  Backpack,
+  Coffee,
+  Headphones,
+  Keyboard,
+  LampDesk,
+  Package,
+  Search,
+  ShoppingCart,
+  Sparkles,
+  Star,
+  Tags,
+  Watch,
+  X,
+} from "lucide-react";
 
 const PAGE_SIZE = 20;
-
-type PromotionRule = {
-  id: string;
-  label: string;
-  status: "configured" | "needs_human_review";
-};
 
 export default function HomePage() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -25,33 +36,9 @@ export default function HomePage() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const [promotionRules, setPromotionRules] = useState<PromotionRule[]>([]);
-  const [promotionState, setPromotionState] = useState<"loading" | "ready" | "error">("loading");
   const [reload, setReload] = useState(0);
   const loadMoreRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/v1/store-config", { cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error("store config request failed");
-        return response.json() as Promise<{ promotionRules?: PromotionRule[] }>;
-      })
-      .then((config) => {
-        if (!active) return;
-        setPromotionRules(Array.isArray(config.promotionRules) ? config.promotionRules : []);
-        setPromotionState("ready");
-      })
-      .catch(() => {
-        if (active) {
-          setPromotionState("error");
-          showToast("优惠规则暂时无法加载，请稍后重试。");
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const resultsScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -78,13 +65,14 @@ export default function HomePage() {
   }, [reload]);
 
   const categories = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string }>();
+    const seen = new Map<string, { id: string; name: string; count: number }>();
     for (const product of products) {
-      if (!seen.has(product.categoryId)) {
-        seen.set(product.categoryId, { id: product.categoryId, name: product.category });
-      }
+      const current = seen.get(product.categoryId);
+      seen.set(product.categoryId, current
+        ? { ...current, count: current.count + 1 }
+        : { id: product.categoryId, name: product.category, count: 1 });
     }
-    return [{ id: "", name: "全部商品" }, ...seen.values()];
+    return [{ id: "", name: "全部商品", count: products.length }, ...seen.values()];
   }, [products]);
 
   const filteredProducts = useMemo(() => {
@@ -113,7 +101,7 @@ export default function HomePage() {
         if (entry.isIntersecting)
           setVisibleCount((count) => Math.min(count + PAGE_SIZE, filteredProducts.length));
       },
-      { rootMargin: "240px" }
+      { root: resultsScrollRef.current, rootMargin: "240px" }
     );
     observer.observe(target);
     return () => observer.disconnect();
@@ -122,14 +110,17 @@ export default function HomePage() {
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   async function handleAdd(product: CatalogProduct) {
     if (!product.stock) return;
+    const source = Array.from(document.querySelectorAll<HTMLElement>("[data-product-visual]"))
+      .find((element) => element.dataset.productVisual === product.id);
+    const target = document.querySelector<HTMLElement>("[data-cart-target]");
     setAddingId(product.id);
     try {
-      const result = await addToCartAndPersist(
+      await addToCartAndPersist(
         { id: product.id, quantity: 1, sku: product.id },
         product.stock,
       );
       setAddedId(product.id);
-      showToast(result.reachedLimit ? "已达到库存上限，已加入可用数量。" : "已加入购物车。", "success");
+      if (source && target) animateProductToCart(source, target);
       window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1800);
     } catch {
       showToast("加入购物车失败，请稍后重试。");
@@ -141,22 +132,23 @@ export default function HomePage() {
   return (
     <div className="shop-home">
       <div className="shop-home__content">
-        <div className="promo-strip" role="status" aria-live="polite">
-          <div className="promo-strip__content">
-            <strong>优惠规则：</strong>
-            {promotionState === "loading" ? <span>正在读取最新配置...</span> : null}
-            {promotionState === "error" ? <span>优惠规则暂时无法加载，请稍后重试。</span> : null}
-            {promotionState === "ready" && promotionRules.length ? (
-              <div className="promo-strip__rules">
-                {promotionRules.map((rule) => (
-                  <span className="promo-rule" key={rule.id}>
-                    <Check size={12} strokeWidth={3} />
-                    {rule.label}
-                    {rule.status === "needs_human_review" ? <em>待确认结算口径</em> : null}
-                  </span>
-                ))}
-              </div>
-            ) : null}
+        <div className="shop-intro">
+          <div>
+            <p className="shop-intro__eyebrow">AI curated · everyday essentials</p>
+            <h1>把日常好物，挑得更轻松</h1>
+            <p className="shop-intro__copy">从实用配件到生活灵感，找到适合自己的选择。</p>
+          </div>
+          <div className="shop-intro__visual" aria-hidden="true">
+            <span className="shop-intro__visual-orbit shop-intro__visual-orbit--one" />
+            <span className="shop-intro__visual-orbit shop-intro__visual-orbit--two" />
+            <span className="shop-intro__visual-icon"><ShoppingCart size={30} strokeWidth={1.7} /></span>
+            <span className="shop-intro__visual-chip shop-intro__visual-chip--top"><Keyboard size={15} /> 3C 配件</span>
+            <span className="shop-intro__visual-chip shop-intro__visual-chip--left"><LampDesk size={15} /> 居家生活</span>
+            <span className="shop-intro__visual-chip shop-intro__visual-chip--right"><Coffee size={15} /> 食品飲料</span>
+          </div>
+          <div className="shop-intro__count" aria-live="polite">
+            <strong>{productsState === "ready" ? filteredProducts.length : "—"}</strong>
+            <span>件商品</span>
           </div>
         </div>
         <div className="shop-body">
@@ -174,6 +166,7 @@ export default function HomePage() {
                   onClick={() => setCategoryId(item.id)}
                 >
                   {item.name}
+                  <span className="shop-filter__count">{item.count}</span>
                   {categoryId === item.id ? (
                     <ArrowRight size={15} className="shop-filter__check" />
                   ) : null}
@@ -181,12 +174,12 @@ export default function HomePage() {
               ))}
             </div>
           </aside>
-          <div className="shop-results">
+          <div className="shop-results" ref={resultsScrollRef}>
             <div className="results-header">
-              <span className="results-header__title">
-                <Package size={15} />
-                商品列表
-              </span>
+              <div className="results-header__heading">
+                <span className="results-header__title"><Package size={15} />商品</span>
+                <span className="results-header__count">{productsState === "ready" ? `${filteredProducts.length} 个结果` : "正在载入"}</span>
+              </div>
               <label className="shop-search">
                 <span className="sr-only">搜索商品</span>
                 <Search size={16} aria-hidden="true" />
@@ -218,7 +211,7 @@ export default function HomePage() {
             </div>
             {productsState === "loading" ? (
               <div className="empty-state">
-                <h2>正在加载商品...</h2>
+                <h2>正在加载商品…</h2>
               </div>
             ) : productsState === "error" ? (
               <div className="empty-state">
@@ -288,6 +281,7 @@ function ProductCard({
   const specs = Object.entries(product.specs);
   return (
     <article className={`product-tile${added ? " product-tile--added" : ""}`}>
+      <ProductVisual product={product} />
       <div className="product-tile__body">
         <div className="product-tile__title-row">
           <h2 className="product-tile__name" title={product.name}>
@@ -329,16 +323,74 @@ function ProductCard({
             </span>
           </div>
           <button
-            className={added ? "button button--added" : "button button--primary"}
+            className={added ? "button button--primary product-tile__add-button product-tile__add-button--confirmed" : "button button--primary product-tile__add-button"}
             type="button"
+            aria-label={`将 ${product.name} 加入购物车`}
+            aria-busy={adding}
             disabled={!product.stock || adding}
             onClick={() => onAdd(product)}
           >
-            <ShoppingCart size={16} />
-            {adding ? "处理中…" : added ? "已加入" : "加入购物车"}
+            {adding ? <span className="button__spinner" aria-hidden="true" /> : <ShoppingCart size={17} />}
+            <span>{adding ? "加入中" : "加入购物车"}</span>
           </button>
         </div>
       </div>
     </article>
   );
+}
+
+function ProductVisual({ product }: { product: CatalogProduct }) {
+  const tone = product.tone || "all";
+  const Icon = product.categoryId === "3c-accessories"
+    ? Keyboard
+    : product.categoryId === "home-living"
+      ? LampDesk
+      : product.categoryId === "beauty"
+        ? Sparkles
+        : product.categoryId === "sports-outdoor"
+          ? Activity
+          : product.categoryId === "food-drink"
+            ? Coffee
+            : product.categoryId.includes("media")
+              ? Headphones
+              : product.categoryId.includes("travel")
+                ? Backpack
+                : product.categoryId.includes("kitchen")
+                  ? AirVent
+                  : product.categoryId.includes("home")
+                    ? LampDesk
+                    : product.categoryId.includes("fitness")
+                      ? Watch
+                      : Package;
+  return (
+    <div
+      className={`product-tile__visual product-tile__visual--${tone}`}
+      data-product-visual={product.id}
+      aria-hidden="true"
+    >
+      <span className="product-tile__visual-orbit" />
+      <span className="product-tile__visual-icon"><Icon size={62} strokeWidth={1.35} /></span>
+      <span className="product-tile__visual-label">{product.category}</span>
+      <span className="product-tile__visual-brand">{product.brand}</span>
+    </div>
+  );
+}
+
+function animateProductToCart(source: HTMLElement, target: HTMLElement) {
+  const sourceRect = source.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const ghost = source.cloneNode(true) as HTMLElement;
+  const width = Math.min(118, Math.max(76, sourceRect.width * 0.32));
+  const height = Math.min(76, Math.max(52, sourceRect.height * 0.42));
+  ghost.className = `${source.className} cart-flight`;
+  ghost.removeAttribute("data-product-visual");
+  ghost.style.setProperty("--flight-start-x", `${sourceRect.left + sourceRect.width / 2 - width / 2}px`);
+  ghost.style.setProperty("--flight-start-y", `${sourceRect.top + sourceRect.height / 2 - height / 2}px`);
+  ghost.style.setProperty("--flight-x", `${targetRect.left + targetRect.width / 2 - (sourceRect.left + sourceRect.width / 2)}px`);
+  ghost.style.setProperty("--flight-y", `${targetRect.top + targetRect.height / 2 - (sourceRect.top + sourceRect.height / 2)}px`);
+  ghost.style.setProperty("--flight-width", `${width}px`);
+  ghost.style.setProperty("--flight-height", `${height}px`);
+  document.body.appendChild(ghost);
+  window.requestAnimationFrame(() => ghost.classList.add("cart-flight--active"));
+  window.setTimeout(() => ghost.remove(), 680);
 }

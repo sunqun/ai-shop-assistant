@@ -7,9 +7,13 @@ const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 type SessionPayload = { userid: string; exp: number };
 
 function sessionSecret(): string {
-  const secret = process.env.AUTH_SESSION_SECRET;
+  const secret = process.env.AUTH_SESSION_SECRET?.trim();
   if (!secret) throw new Error("Missing required environment variable: AUTH_SESSION_SECRET");
   return secret;
+}
+
+export function assertSessionReady(): void {
+  sessionSecret();
 }
 
 function encode(payload: SessionPayload): string {

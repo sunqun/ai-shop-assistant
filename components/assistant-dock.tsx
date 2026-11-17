@@ -356,8 +356,21 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
           ) : null}
           <div className="assistant-dock__results">
             {state === "idle" ? (
-              <div className="assistant-empty assistant-empty--idle" aria-hidden="true">
-                <Sparkles size={30} strokeWidth={1.5} />
+              <div className="assistant-empty assistant-empty--idle">
+                <div className="assistant-empty__icon"><Sparkles size={24} strokeWidth={1.7} /></div>
+                <strong>描述一下你想找的好物</strong>
+                <p>告诉我预算、场景或偏好，我会从商品里帮你筛选。</p>
+                <div className="assistant-suggestions" aria-label="快捷查询">
+                  {["通勤降噪耳机", "桌面收纳好物", "适合送人的礼物"].map((suggestion) => (
+                    <button
+                      type="button"
+                      key={suggestion}
+                      onClick={() => setQuery(suggestion)}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
             {state === "loading" && !products.length ? (
