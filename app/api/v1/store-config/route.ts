@@ -17,7 +17,7 @@ export async function GET() {
       },
       {
         id: "ai-order-discount",
-        label: "AI 助理自动创建订单额外 95 折（M4）",
+        label: "AI 助理自动创建订单额外 95 折",
         status: "configured",
       },
     ],

@@ -29,3 +29,7 @@ npm run build
 ```
 
 订单记录写入 MySQL，需先按 `db/migrations/` 初始化数据库并配置项目所需的数据库环境变量。
+
+### Railway 数据库初始化
+
+在 Railway 的 MySQL 服务中打开 Query/Console，按文件名顺序执行 `db/migrations/` 下的 SQL。商品目录必须先执行 `002_create_products.sql`，再执行 `003_create_categories.sql`；如果此前执行 `003_create_categories.sql` 时因 `products` 不存在而失败，先执行商品迁移，再重新执行分类迁移。

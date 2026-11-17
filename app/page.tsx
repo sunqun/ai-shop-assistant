@@ -6,6 +6,7 @@ import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
 import { addToCartAndPersist } from "@/lib/cart-client";
 import { showToast } from "@/lib/toast";
+import { ArrowRight, Check, Package, Search, ShoppingCart, Star, Tags, X } from "lucide-react";
 
 const PAGE_SIZE = 20;
 
@@ -141,15 +142,15 @@ export default function HomePage() {
     <div className="shop-home">
       <div className="shop-home__content">
         <div className="promo-strip" role="status" aria-live="polite">
-          <span className="promo-strip__dot" aria-hidden="true" />
           <div className="promo-strip__content">
-            <strong>优惠规则</strong>
+            <strong>优惠规则：</strong>
             {promotionState === "loading" ? <span>正在读取最新配置...</span> : null}
             {promotionState === "error" ? <span>优惠规则暂时无法加载，请稍后重试。</span> : null}
             {promotionState === "ready" && promotionRules.length ? (
               <div className="promo-strip__rules">
                 {promotionRules.map((rule) => (
                   <span className="promo-rule" key={rule.id}>
+                    <Check size={12} strokeWidth={3} />
                     {rule.label}
                     {rule.status === "needs_human_review" ? <em>待确认结算口径</em> : null}
                   </span>
@@ -158,32 +159,13 @@ export default function HomePage() {
             ) : null}
           </div>
         </div>
-        <div className="shop-toolbar">
-          <label className="shop-search">
-            <span className="sr-only">搜索商品</span>
-            <span aria-hidden="true">⌕</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索商品名称、品类或关键词"
-            />
-          </label>
-          <button
-            className="clear-filter clear-filter--toolbar"
-            type="button"
-            onClick={() => {
-              setCategoryId("");
-              setQuery("");
-              setSort("recommended");
-            }}
-          >
-            清除筛选
-          </button>
-        </div>
         <div className="shop-body">
           <aside className="shop-filters" aria-label="商品筛选">
             <div className="shop-filter-group">
-              <span className="shop-filter-label">品类</span>
+              <span className="shop-filter-label">
+                <Tags size={14} />
+                品类
+              </span>
               {categories.map((item) => (
                 <button
                   key={item.id}
@@ -192,13 +174,38 @@ export default function HomePage() {
                   onClick={() => setCategoryId(item.id)}
                 >
                   {item.name}
+                  {categoryId === item.id ? (
+                    <ArrowRight size={15} className="shop-filter__check" />
+                  ) : null}
                 </button>
               ))}
             </div>
           </aside>
           <div className="shop-results">
             <div className="results-header">
-              <span>商品列表</span>
+              <span className="results-header__title">
+                <Package size={15} />
+                商品列表
+              </span>
+              <label className="shop-search">
+                <span className="sr-only">搜索商品</span>
+                <Search size={16} aria-hidden="true" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="搜索商品名称、品类或关键词"
+                />
+                {query ? (
+                  <button
+                    className="shop-search__clear"
+                    type="button"
+                    aria-label="清除搜索"
+                    onClick={() => setQuery("")}
+                  >
+                    <X size={14} />
+                  </button>
+                ) : null}
+              </label>
               <label className="shop-sort">
                 <span className="sr-only">排序</span>
                 <select value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -298,7 +305,15 @@ function ProductCard({
               {product.category}
             </span>
           </h2>
-          <span className="rating">{product.rating ? `★ ${product.rating}` : "暂无评分"}</span>
+          <span className="rating">
+            {product.rating ? (
+              <>
+                <Star size={13} fill="currentColor" /> {product.rating}
+              </>
+            ) : (
+              "暂无评分"
+            )}
+          </span>
         </div>
         <p>{product.description}</p>
         <div className="product-tile__specs">
@@ -319,6 +334,7 @@ function ProductCard({
             disabled={!product.stock || adding}
             onClick={() => onAdd(product)}
           >
+            <ShoppingCart size={16} />
             {adding ? "处理中…" : added ? "已加入" : "加入购物车"}
           </button>
         </div>

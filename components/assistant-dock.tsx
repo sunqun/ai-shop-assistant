@@ -12,6 +12,7 @@ import {
   type PaymentLinkView,
 } from "@/lib/payment-link-client";
 import { showToast } from "@/lib/toast";
+import { ArrowRight, Bot, Sparkles, X } from "lucide-react";
 
 type AgentProduct = {
   id: string;
@@ -277,19 +278,21 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
                   <strong>{link.product.name}</strong>
                   <span>数量 {link.quantity} · {link.username}</span>
                 </div>
-                <div className="assistant-payment-link__url" title={paymentLinkUrl(link)}>
-                  {paymentLinkUrl(link)}
-                </div>
-                <div className="assistant-payment-link__actions">
-                  <button className="assistant-text-link" type="button" onClick={() => void copyPaymentLink(link)}>
-                    复制
-                  </button>
-                  <button className="assistant-text-link" type="button" onClick={() => window.open(paymentLinkUrl(link), "_blank", "noopener,noreferrer")}>
-                    打开
-                  </button>
-                  <button className="assistant-text-link assistant-text-link--danger" type="button" disabled={deletingPaymentLinkId === link.linkId} onClick={() => void removePaymentLink(link)}>
-                    {deletingPaymentLinkId === link.linkId ? "删除中..." : "删除"}
-                  </button>
+                <div className="assistant-payment-link__row">
+                  <div className="assistant-payment-link__url" title={paymentLinkUrl(link)}>
+                    {paymentLinkUrl(link)}
+                  </div>
+                  <div className="assistant-payment-link__actions">
+                    <button className="assistant-text-link" type="button" onClick={() => void copyPaymentLink(link)}>
+                      复制
+                    </button>
+                    <button className="assistant-text-link" type="button" onClick={() => window.open(paymentLinkUrl(link), "_blank", "noopener,noreferrer")}>
+                      打开
+                    </button>
+                    <button className="assistant-text-link assistant-text-link--danger" type="button" disabled={deletingPaymentLinkId === link.linkId} onClick={() => void removePaymentLink(link)}>
+                      {deletingPaymentLinkId === link.linkId ? "删除中..." : "删除"}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -301,7 +304,8 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
         aria-label="AI 购物助手"
       >
         <div className="assistant-dock__header">
-          <div>
+          <div className="assistant-dock__title">
+            <Bot size={18} />
             <strong>AI购物助手</strong>
           </div>
         </div>
@@ -330,7 +334,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
               maxLength={1000}
             />
             <button type="submit" aria-label="查找商品" disabled={state === "loading"}>
-              ↗
+              <ArrowRight size={18} />
             </button>
           </form>
 
@@ -352,7 +356,9 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
           ) : null}
           <div className="assistant-dock__results">
             {state === "idle" ? (
-              <p className="assistant-empty">告诉我用途、预算或规格，我会帮你查找商品。</p>
+              <div className="assistant-empty assistant-empty--idle" aria-hidden="true">
+                <Sparkles size={30} strokeWidth={1.5} />
+              </div>
             ) : null}
             {state === "loading" && !products.length ? (
               <p className="assistant-empty">正在查询商品和库存...</p>
@@ -470,7 +476,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
                 onClick={() => setDetailProduct(null)}
                 aria-label="关闭详情"
               >
-                ×
+                <X size={18} />
               </button>
             </div>
             <div className="assistant-detail__body">
@@ -542,7 +548,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
                 onClick={() => setOrderReceipt(null)}
                 aria-label="关闭回执"
               >
-                ×
+                <X size={18} />
               </button>
             </div>
             <div className="assistant-detail__body">

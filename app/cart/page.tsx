@@ -237,120 +237,150 @@ export default function CartPage() {
     );
 
   return (
-    <div>
+    <div className="cart-page">
+      <header className="cart-heading">
+        <div>
+          <p className="muted">{rows.length} 件商品</p>
+        </div>
+        <button className="button button--ghost" type="button" onClick={() => router.push("/")}>
+          继续购物
+        </button>
+      </header>
+
       <div className="cart-layout">
-        <section className="cart-list" aria-label="购物车商品">
-          {rows.map(({ item, product }) => (
-            <article className="cart-row" key={item.id}>
-              <label className="cart-select">
-                <span className="sr-only">选择 {product!.name}</span>
-                <input
-                  type="checkbox"
-                  checked={selection[item.id] !== false}
-                  onChange={(event) => toggleSelection(item.id, event.target.checked)}
-                />
-              </label>
-              <div className="cart-row__visual" aria-hidden="true">
-                {product!.name.slice(0, 1)}
-              </div>
-              <div className="cart-row__content">
-                <div className="cart-row__title">{product!.name}</div>
-                <span className="price">NT${product!.price.toLocaleString()}</span>
-                {allocations[item.id]?.unavailableQuantity ? (
-                  <span className="stock stock--out">
-                    缺货 {allocations[item.id].unavailableQuantity} 件，已锁定
-                    {allocations[item.id].allocatedQuantity} 件
-                  </span>
-                ) : allocations[item.id] ? (
-                  <span className="stock stock--in">
-                    已锁定 {allocations[item.id].allocatedQuantity} 件
-                  </span>
-                ) : null}
-              </div>
-              <label className="cart-quantity">
-                <span className="sr-only">{product!.name} 数量</span>
-                <input
-                  type="number"
-                  min="1"
-                  max={product!.stock || 1}
-                  value={item.quantity}
-                  onChange={(event) => {
-                    const quantity = Math.max(
-                      1,
-                      Math.min(product!.stock || 1, Number(event.target.value) || 1)
-                    );
-                    persist(
-                      items.map((entry) => (entry.id === item.id ? { ...entry, quantity } : entry))
-                    );
-                  }}
-                />
-              </label>
-              <strong>
-                {allocations[item.id]
-                  ? formatMinor(lineSubtotalMinor(product!.price, allocations[item.id].allocatedQuantity))
-                  : "库存确认后计算"}
-              </strong>
-              <button
-                className="button button--ghost cart-remove"
-                type="button"
-                onClick={() => persist(items.filter((entry) => entry.id !== item.id))}
-              >
-                移除
-              </button>
-            </article>
-          ))}
+        <section className="cart-sheet" aria-label="购物车商品">
+          <div className="cart-sheet__list">
+            {rows.map(({ item, product }) => {
+              const allocation = allocations[item.id];
+              const subtotal = allocation
+                ? formatMinor(lineSubtotalMinor(product!.price, allocation.allocatedQuantity))
+                : "库存确认后计算";
+              return (
+                <article className="cart-row" key={item.id}>
+                  <label className="cart-select">
+                    <span className="sr-only">选择 {product!.name}</span>
+                    <input
+                      type="checkbox"
+                      checked={selection[item.id] !== false}
+                      onChange={(event) => toggleSelection(item.id, event.target.checked)}
+                    />
+                  </label>
+                  <div
+                    className={`cart-row__visual cart-row__visual--${product!.tone || "all"}`}
+                    aria-hidden="true"
+                  >
+                    {(product!.brand || product!.name).slice(0, 1)}
+                  </div>
+                  <div className="cart-row__content">
+                    <div className="cart-row__title">{product!.name}</div>
+                    <div className="cart-row__brand">
+                      {product!.brand} · {product!.category}
+                    </div>
+                    <span className="cart-row__unit">
+                      单价 NT${product!.price.toLocaleString()}
+                    </span>
+                    {allocation?.unavailableQuantity ? (
+                      <span className="stock stock--out">
+                        缺货 {allocation.unavailableQuantity} 件，已锁定{" "}
+                        {allocation.allocatedQuantity} 件
+                      </span>
+                    ) : allocation ? (
+                      <span className="stock stock--in">
+                        已锁定 {allocation.allocatedQuantity} 件
+                      </span>
+                    ) : null}
+                  </div>
+                  <label className="cart-quantity">
+                    <span className="sr-only">{product!.name} 数量</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={product!.stock || 1}
+                      value={item.quantity}
+                      onChange={(event) => {
+                        const quantity = Math.max(
+                          1,
+                          Math.min(product!.stock || 1, Number(event.target.value) || 1)
+                        );
+                        persist(
+                          items.map((entry) =>
+                            entry.id === item.id ? { ...entry, quantity } : entry
+                          )
+                        );
+                      }}
+                    />
+                  </label>
+                  <strong className="cart-row__subtotal">{subtotal}</strong>
+                  <button
+                    className="cart-remove"
+                    type="button"
+                    onClick={() => persist(items.filter((entry) => entry.id !== item.id))}
+                  >
+                    移除
+                  </button>
+                </article>
+              );
+            })}
+          </div>
         </section>
-        <aside className="cart-summary card">
-          <p className="eyebrow">费用摘要</p>
+
+        <aside className="cart-total">
+          <div className="cart-total__head">
+            <span>预计应付</span>
+            {quoteState === "ready" && quote ? (
+              <strong className="cart-total__amount">{formatMinor(quote.totalDueMinor)}</strong>
+            ) : (
+              <span className="cart-total__amount cart-total__amount--pending">
+                {inventoryState === "ready" ? "计算中" : "待确认"}
+              </span>
+            )}
+          </div>
+
           {quoteState === "ready" && quote ? (
-            <>
-              <div className="cart-summary__line">
-                <span>商品小计</span>
-                <strong>{formatMinor(quote.subtotalMinor)}</strong>
+            <dl className="cart-total__lines">
+              <div className="cart-total__line">
+                <dt>商品小计</dt>
+                <dd>{formatMinor(quote.subtotalMinor)}</dd>
               </div>
-              <div className="cart-summary__line">
-                <span>折扣减免</span>
-                <strong>
+              <div className="cart-total__line">
+                <dt>折扣减免</dt>
+                <dd>
                   {quote.discountMinor ? `-${formatMinor(quote.discountMinor)}` : formatMinor(0)}
-                </strong>
+                </dd>
               </div>
-              <div className="cart-summary__line">
-                <span>运费</span>
-                <strong>{quote.shippingMinor ? formatMinor(quote.shippingMinor) : "免运费"}</strong>
+              <div className="cart-total__line">
+                <dt>运费</dt>
+                <dd>{quote.shippingMinor ? formatMinor(quote.shippingMinor) : "免运费"}</dd>
               </div>
-              <div className="cart-summary__total">
-                <span>预计应付</span>
-                <strong>{formatMinor(quote.totalDueMinor)}</strong>
-              </div>
-            </>
-          ) : (
-            <div className="cart-summary__line muted">
-              <span>库存与报价</span>
-              <span>{inventoryState === "ready" ? "等待报价" : "结账前确认"}</span>
-            </div>
-          )}
-          {!authLoading && !user ? (
-            <>
-              <p className="muted">请登录后付款。</p>
-              <button className="button button--secondary" type="button" onClick={openLogin}>
-                登录
-              </button>
-            </>
+            </dl>
           ) : null}
-          {user && !user.isAuthorized ? (
-            <p className="notice notice--error">当前账户尚未完成下单授权，请前往“我的”管理授权。</p>
-          ) : null}
-          <button
-            className="button button--primary"
-            type="button"
-            disabled={quoteState !== "ready" || !user?.isAuthorized || submitting || selectedItems.length === 0}
-            onClick={createOrder}
-          >
-            {submitting ? "正在创建订单…" : "付款"}
-          </button>
-          <button className="button button--ghost" type="button" onClick={() => router.push("/")}>
-            继续购物
-          </button>
+
+          <div className="cart-total__foot">
+            {!authLoading && !user ? (
+              <>
+                <p className="cart-total__hint">登录后即可付款。</p>
+                <button className="cart-total__login" type="button" onClick={openLogin}>
+                  登录
+                </button>
+              </>
+            ) : null}
+            {user && !user.isAuthorized ? (
+              <p className="cart-total__notice">尚未完成下单授权，请前往「订单」页完成授权。</p>
+            ) : null}
+            <button
+              className="cart-total__pay"
+              type="button"
+              disabled={
+                quoteState !== "ready" ||
+                !user?.isAuthorized ||
+                submitting ||
+                selectedItems.length === 0
+              }
+              onClick={createOrder}
+            >
+              {submitting ? "正在创建订单…" : "付款"}
+            </button>
+          </div>
         </aside>
       </div>
     </div>
