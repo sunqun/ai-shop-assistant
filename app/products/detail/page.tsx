@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import type { CatalogProduct, CatalogReview } from "@/lib/catalog";
-import { addToCartAndPersist } from "@/lib/cart-client";
+import { addToCart } from "@/lib/cart-client";
 import { showToast } from "@/lib/toast";
 
 type DetailResponse = {
@@ -122,7 +122,7 @@ export default function ProductDetailPage({
     const selectedQuantity = Math.max(1, Math.min(quantity, currentProduct.stock));
     setAdding(true);
     try {
-      const result = await addToCartAndPersist(
+      const result = await addToCart(
         { id: currentProduct.id, quantity: selectedQuantity, sku: currentProduct.id },
         currentProduct.stock,
       );

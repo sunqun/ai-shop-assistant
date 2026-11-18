@@ -1,23 +1,13 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 export type CartSessionSource = "WEB" | "AI";
 
-export function deriveCartId(token: string, source: CartSessionSource = "WEB"): string {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("INVALID_CART_TOKEN");
+const USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function deriveUserCartId(userid: string, source: CartSessionSource = "WEB"): string {
+  if (!USER_ID_RE.test(userid)) throw new Error("INVALID_USER_ID");
   const secret = process.env.AUTH_SESSION_SECRET;
-  // The local environment already uses a 28-byte secret; keep the minimum at
-  // 16 bytes here while production deployments should use a longer random value.
+  // 本地环境已使用较长密钥；这里保持最小 16 字节，生产应使用更长的随机值。
   if (!secret || Buffer.byteLength(secret) < 16) throw new Error("CART_SESSION_UNAVAILABLE");
-  return createHmac("sha256", secret).update(`cart-v2:${source}:${token}`).digest("hex");
+  return createHmac("sha256", secret).update(`cart-v3:${source}:${userid}`).digest("hex");
 }
-
-export function isCartTokenValid(token: string): boolean {
-  try {
-    const first = deriveCartId(token);
-    const second = deriveCartId(`${token.slice(0, -1)}${token.endsWith("A") ? "B" : "A"}`);
-    return !timingSafeEqual(Buffer.from(first), Buffer.from(second));
-  } catch {
-    return false;
-  }
-}
-

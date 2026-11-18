@@ -13,7 +13,6 @@ export async function POST(request: Request) {
   const session = await readSession();
   if (!session) return errorResponse(401, "UNAUTHENTICATED", "请先登录后再提交订单。");
   let body: {
-    cartToken?: unknown;
     cartVersion?: unknown;
     quoteId?: unknown;
     idempotencyKey?: unknown;
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
   }
   if (
     !body ||
-    typeof body.cartToken !== "string" ||
     !Number.isSafeInteger(body.cartVersion) ||
     typeof body.quoteId !== "string" ||
     typeof body.idempotencyKey !== "string" ||
@@ -35,7 +33,6 @@ export async function POST(request: Request) {
     return errorResponse(400, "INVALID_ORDER_REQUEST", "AI 下单请求无效。");
   const result = await callAiSubmitOrderTool(
     {
-      cartToken: body.cartToken,
       cartVersion: body.cartVersion as number,
       quoteId: body.quoteId,
       idempotencyKey: body.idempotencyKey,

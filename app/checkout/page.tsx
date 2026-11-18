@@ -6,18 +6,15 @@ import { PageShell, PlaceholderCard } from "@/components/page-shell";
 import { useAuth } from "@/components/auth-provider";
 import { getProduct } from "@/lib/products";
 import { lineSubtotalMinor } from "@/lib/pricing-domain";
-import { getCartToken, readLocalCart, reconcileCart, quoteCart } from "@/lib/cart-client";
-import { readApiResponse } from "@/lib/auth-retry";
+import {
+  fetchCart,
+  quoteCart,
+  submitOrder,
+  type CartQuote,
+  type UserCartItem,
+} from "@/lib/cart-client";
 import { showToast } from "@/lib/toast";
 
-type QuoteView = {
-  quoteId: string;
-  subtotalMinor: number;
-  discountMinor: number;
-  shippingMinor: number;
-  totalDueMinor: number;
-  expiresAt: string;
-};
 type CheckoutState = "loading" | "ready" | "error";
 
 function money(value: number) {
@@ -28,78 +25,66 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { user, loading: authLoading, openLogin } = useAuth();
   const [state, setState] = useState<CheckoutState>("loading");
-  const [items, setItems] = useState(() => (typeof window === "undefined" ? [] : readLocalCart()));
+  const [items, setItems] = useState<UserCartItem[]>([]);
   const [cartVersion, setCartVersion] = useState<number | null>(null);
-  const [quote, setQuote] = useState<QuoteView | null>(null);
+  const [quote, setQuote] = useState<CartQuote | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState("");
+
   const rows = useMemo(
     () =>
-      items.map((item) => ({ item, product: getProduct(item.id) })).filter((row) => row.product),
+      items
+        .map((item) => ({ item, product: getProduct(item.productId) }))
+        .filter((row) => row.product),
     [items]
   );
 
   useEffect(() => {
-    setItems(readLocalCart());
     setIdempotencyKey(crypto.randomUUID());
   }, []);
 
   useEffect(() => {
-    if (!items.length) {
-      setState("error");
-      showToast("购物车为空，请先选择商品。", "info");
+    if (!user) {
+      setItems([]);
+      setCartVersion(null);
+      setQuote(null);
+      setState("loading");
       return;
     }
     let active = true;
-    setState("loading");
-    setQuote(null);
-    setCartVersion(null);
-    reconcileCart(items)
-      .then(async (result) => {
-        const version = result.cartVersion;
-        const quoteResult = await quoteCart(version);
+    (async () => {
+      try {
+        setState("loading");
+        const cart = await fetchCart();
         if (!active) return;
-        const value = quoteResult.quote as Partial<QuoteView> | undefined;
-        if (
-          !value ||
-          typeof value.quoteId !== "string" ||
-          typeof value.subtotalMinor !== "number" ||
-          typeof value.discountMinor !== "number" ||
-          typeof value.shippingMinor !== "number" ||
-          typeof value.totalDueMinor !== "number" ||
-          typeof value.expiresAt !== "string"
-        )
-          throw new Error("报价信息无效，请返回购物车重试。");
-        setCartVersion(version);
-        setQuote(value as QuoteView);
+        if (!cart.items.length) {
+          setState("error");
+          showToast("购物车为空，请先选择商品。", "info");
+          return;
+        }
+        setItems(cart.items);
+        setCartVersion(cart.cartVersion);
+        const result = await quoteCart(cart.cartVersion);
+        if (!active) return;
+        setQuote(result.quote);
         setState("ready");
-      })
-      .catch(() => {
-        if (!active) return;
-        setState("error");
-        showToast("无法确认购物车和报价，请稍后重试。");
-      });
+      } catch {
+        if (active) {
+          setState("error");
+          showToast("无法确认购物车和报价，请稍后重试。");
+        }
+      }
+    })();
     return () => {
       active = false;
     };
-  }, [items]);
+  }, [user]);
 
   async function createOrder() {
     if (!quote || cartVersion === null || submitting) return;
     setSubmitting(true);
     try {
-      const response = await fetch("/api/v1/carts/order", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          cartToken: getCartToken(),
-          cartVersion,
-          quoteId: quote.quoteId,
-          idempotencyKey,
-        }),
-      });
-      await readApiResponse<{ orderGroupId: string }>(response, "订单创建失败");
+      await submitOrder(cartVersion, quote.quoteId, idempotencyKey);
       router.push("/account/orders");
     } catch {
       showToast("订单创建失败，请稍后重试。");
@@ -109,9 +94,22 @@ export default function CheckoutPage() {
     }
   }
 
+  if (!authLoading && !user)
+    return (
+      <PageShell eyebrow="确认订单" title="请先登录">
+        <div className="empty-state">
+          <h2>请先登录</h2>
+          <p>确认订单前需要登录账号。</p>
+          <button className="button button--primary" type="button" onClick={openLogin}>
+            登录
+          </button>
+        </div>
+      </PageShell>
+    );
+
   if (!rows.length && state === "error")
     return (
-      <PageShell eyebrow="M6 订单记录创建" title="确认订单">
+      <PageShell eyebrow="确认订单" title="确认订单">
         <PlaceholderCard
           title="无法继续结账"
           description="购物车为空或商品信息暂时不可用，请返回购物车检查后重试。"
@@ -123,7 +121,7 @@ export default function CheckoutPage() {
 
   return (
     <PageShell
-      eyebrow="M6 订单记录创建"
+      eyebrow="确认订单"
       title="确认订单"
       description="确认商品和报价后付款并创建订单，提交成功后会扣减已锁定库存。"
     >
@@ -131,14 +129,14 @@ export default function CheckoutPage() {
         <section className="card stack" aria-label="订单商品">
           <h2>商品清单</h2>
           {rows.map(({ item, product }) => (
-            <div className="list-item" key={item.id}>
+            <div className="list-item" key={item.skuId}>
               <div>
                 <p className="list-item__title">{product!.name}</p>
                 <p className="list-item__meta">
-                  规格：{item.sku || product!.specs[0]} · 数量：{item.quantity}
+                  规格：{item.skuId} · 数量：{item.requestedQuantity}
                 </p>
               </div>
-              <strong>{money(lineSubtotalMinor(product!.price, item.quantity))}</strong>
+              <strong>{money(lineSubtotalMinor(product!.price, item.allocatedQuantity || item.requestedQuantity))}</strong>
             </div>
           ))}
           <p className="notice">提交后会创建订单并扣减本次已锁定的库存；真实支付尚未接入。</p>
@@ -175,14 +173,6 @@ export default function CheckoutPage() {
             <p role="alert" className="notice notice--error">
               库存和报价暂时无法确认，请稍后重试或返回购物车。
             </p>
-          ) : null}
-          {!authLoading && !user ? (
-            <>
-              <p className="muted">请登录后创建订单。</p>
-              <button className="button button--secondary" type="button" onClick={openLogin}>
-                登录
-              </button>
-            </>
           ) : null}
           {user && !user.isAuthorized ? (
             <p role="alert" className="notice notice--error">

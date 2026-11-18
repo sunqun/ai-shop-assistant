@@ -6,59 +6,30 @@ import { PlaceholderCard } from "@/components/page-shell";
 import { useAuth } from "@/components/auth-provider";
 import type { CatalogProduct } from "@/lib/catalog";
 import { lineSubtotalMinor } from "@/lib/pricing-domain";
-import { getCartToken, quoteCart, reconcileCart } from "@/lib/cart-client";
-import { readApiResponse } from "@/lib/auth-retry";
+import {
+  fetchCart,
+  quoteCart,
+  reconcileCart,
+  submitOrder,
+  type CartQuote,
+  type UserCartItem,
+} from "@/lib/cart-client";
 import { showToast } from "@/lib/toast";
-
-type CartItem = { id: string; quantity: number; sku?: string };
-type QuoteView = {
-  quoteId: string;
-  subtotalMinor: number;
-  discountMinor: number;
-  shippingMinor: number;
-  totalDueMinor: number;
-  promotion: string;
-  appliedRules?: string[];
-  label: string;
-  expiresAt: string;
-};
-const CART_KEY = "ai-shop-cart";
-
-function readCart(): CartItem[] {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(CART_KEY) || "[]");
-    return Array.isArray(value)
-      ? value.filter(
-          (item): item is CartItem =>
-            item &&
-            typeof item.id === "string" &&
-            Number.isFinite(item.quantity) &&
-            item.quantity > 0
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 export default function CartPage() {
   const router = useRouter();
   const { user, loading: authLoading, openLogin } = useAuth();
-  const [items, setItems] = useState<CartItem[]>([]);
+  const [items, setItems] = useState<UserCartItem[]>([]);
   const [inventoryState, setInventoryState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle"
   );
-  const [allocations, setAllocations] = useState<
-    Record<string, { allocatedQuantity: number; unavailableQuantity: number }>
-  >({});
   const [cartVersion, setCartVersion] = useState<number | null>(null);
   const [quoteState, setQuoteState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [quote, setQuote] = useState<QuoteView | null>(null);
+  const [quote, setQuote] = useState<CartQuote | null>(null);
   const [catalog, setCatalog] = useState<Map<string, CatalogProduct>>(new Map());
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState("");
-  const [selection, setSelection] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let active = true;
@@ -90,76 +61,45 @@ export default function CartPage() {
   }, []);
 
   useEffect(() => {
-    const refresh = () => setItems(readCart());
-    refresh();
-    window.addEventListener("cart-updated", refresh);
-    return () => window.removeEventListener("cart-updated", refresh);
-  }, []);
-
-  const selectedItems = useMemo(
-    () => items.filter((item) => selection[item.id] !== false),
-    [items, selection]
-  );
-
-  useEffect(() => {
-    if (!selectedItems.length) {
-      setInventoryState("idle");
-      setAllocations({});
+    if (!user) {
+      setItems([]);
       setCartVersion(null);
       setQuote(null);
       setQuoteState("idle");
+      setInventoryState("idle");
       return;
     }
     let active = true;
     setInventoryState("loading");
-    reconcileCart(selectedItems)
-      .then((result) => {
+    fetchCart()
+      .then((cart) => {
         if (!active) return;
-        const nextAllocations: Record<
-          string,
-          { allocatedQuantity: number; unavailableQuantity: number }
-        > = {};
-        for (const allocation of (result.allocations as
-          | Array<{ skuId: string; allocatedQuantity: number; unavailableQuantity: number }>
-          | undefined) ?? []) {
-          nextAllocations[allocation.skuId] = allocation;
-        }
-        setAllocations(nextAllocations);
-        setCartVersion(typeof result.cartVersion === "number" ? result.cartVersion : null);
+        setItems(cart.items);
+        setCartVersion(cart.items.length ? cart.cartVersion : null);
         setInventoryState("ready");
       })
       .catch(() => {
         if (!active) return;
         setInventoryState("error");
-        showToast("库存确认失败，请稍后重试。");
+        showToast("购物车暂时无法加载，请稍后重试。");
       });
     return () => {
       active = false;
     };
-  }, [selectedItems]);
+  }, [user]);
 
   useEffect(() => {
-    if (cartVersion === null) return;
+    if (cartVersion === null) {
+      setQuote(null);
+      setQuoteState("idle");
+      return;
+    }
     let active = true;
     setQuoteState("loading");
     quoteCart(cartVersion)
       .then((result) => {
         if (!active) return;
-        const value = result.quote as Partial<QuoteView> | undefined;
-        if (
-          !value ||
-          typeof value.quoteId !== "string" ||
-          typeof value.subtotalMinor !== "number" ||
-          typeof value.discountMinor !== "number" ||
-          typeof value.shippingMinor !== "number" ||
-          typeof value.totalDueMinor !== "number" ||
-          typeof value.promotion !== "string" ||
-          typeof value.label !== "string" ||
-          typeof value.expiresAt !== "string"
-        ) {
-          throw new Error("报价响应无效");
-        }
-        setQuote(value as QuoteView);
+        setQuote(result.quote);
         setQuoteState("ready");
       })
       .catch(() => {
@@ -175,39 +115,54 @@ export default function CartPage() {
 
   const rows = useMemo(
     () =>
-      items.map((item) => ({ item, product: catalog.get(item.id) })).filter((row) => row.product),
+      items
+        .map((item) => ({ item, product: catalog.get(item.productId) }))
+        .filter((row) => row.product),
     [items, catalog]
   );
+
   function formatMinor(value: number) {
     return `NT$${Math.round(value / 100).toLocaleString()}`;
   }
 
-  function persist(next: CartItem[]) {
-    setItems(next);
-    window.localStorage.setItem(CART_KEY, JSON.stringify(next));
-    window.dispatchEvent(new CustomEvent("cart-updated"));
-  }
-
-  function toggleSelection(id: string, checked: boolean) {
-    setSelection((current) => ({ ...current, [id]: checked }));
+  async function applyItems(nextItems: UserCartItem[]) {
+    setItems(nextItems);
+    setInventoryState("loading");
+    try {
+      const result = await reconcileCart(
+        nextItems.map((item) => ({
+          id: item.skuId,
+          quantity: item.requestedQuantity,
+          sku: item.skuId,
+        }))
+      );
+      const bySku = new Map(result.allocations.map((allocation) => [allocation.skuId, allocation]));
+      setItems(
+        nextItems.map((item) => {
+          const allocation = bySku.get(item.skuId);
+          return allocation
+            ? {
+                ...item,
+                requestedQuantity: allocation.quantity,
+                allocatedQuantity: allocation.allocatedQuantity,
+                unavailableQuantity: allocation.unavailableQuantity,
+              }
+            : item;
+        })
+      );
+      setCartVersion(nextItems.length ? result.cartVersion : null);
+      setInventoryState("ready");
+    } catch {
+      setInventoryState("error");
+      showToast("购物车更新失败，请稍后重试。");
+    }
   }
 
   async function createOrder() {
     if (!quote || cartVersion === null || submitting) return;
     setSubmitting(true);
     try {
-      const response = await fetch("/api/v1/carts/order", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({
-          cartToken: getCartToken(),
-          cartVersion,
-          quoteId: quote.quoteId,
-          idempotencyKey,
-        }),
-      });
-      await readApiResponse<{ orderGroupId: string }>(response, "订单创建失败");
+      await submitOrder(cartVersion, quote.quoteId, idempotencyKey);
       router.push("/account/orders");
     } catch {
       showToast("订单创建失败，请稍后重试。");
@@ -217,10 +172,21 @@ export default function CartPage() {
     }
   }
 
-  if (catalogLoading)
+  if (catalogLoading || authLoading)
     return (
       <div className="empty-state">
         <p>正在加载购物车...</p>
+      </div>
+    );
+
+  if (!user)
+    return (
+      <div className="empty-state">
+        <h2>请先登录</h2>
+        <p>购物车已关联到你的账号，登录后才能查看和管理购物车。</p>
+        <button className="button button--primary" type="button" onClick={openLogin}>
+          登录
+        </button>
       </div>
     );
 
@@ -251,20 +217,12 @@ export default function CartPage() {
         <section className="cart-sheet" aria-label="购物车商品">
           <div className="cart-sheet__list">
             {rows.map(({ item, product }) => {
-              const allocation = allocations[item.id];
-              const subtotal = allocation
-                ? formatMinor(lineSubtotalMinor(product!.price, allocation.allocatedQuantity))
-                : "库存确认后计算";
+              const subtotal =
+                item.allocatedQuantity > 0
+                  ? formatMinor(lineSubtotalMinor(product!.price, item.allocatedQuantity))
+                  : "库存确认后计算";
               return (
-                <article className="cart-row" key={item.id}>
-                  <label className="cart-select">
-                    <span className="sr-only">选择 {product!.name}</span>
-                    <input
-                      type="checkbox"
-                      checked={selection[item.id] !== false}
-                      onChange={(event) => toggleSelection(item.id, event.target.checked)}
-                    />
-                  </label>
+                <article className="cart-row" key={item.skuId}>
                   <div
                     className={`cart-row__visual cart-row__visual--${product!.tone || "all"}`}
                     aria-hidden="true"
@@ -276,18 +234,13 @@ export default function CartPage() {
                     <div className="cart-row__brand">
                       {product!.brand} · {product!.category}
                     </div>
-                    <span className="cart-row__unit">
-                      单价 NT${product!.price.toLocaleString()}
-                    </span>
-                    {allocation?.unavailableQuantity ? (
+                    <span className="cart-row__unit">单价 NT${product!.price.toLocaleString()}</span>
+                    {item.unavailableQuantity > 0 ? (
                       <span className="stock stock--out">
-                        缺货 {allocation.unavailableQuantity} 件，已锁定{" "}
-                        {allocation.allocatedQuantity} 件
+                        缺货 {item.unavailableQuantity} 件，已锁定 {item.allocatedQuantity} 件
                       </span>
-                    ) : allocation ? (
-                      <span className="stock stock--in">
-                        已锁定 {allocation.allocatedQuantity} 件
-                      </span>
+                    ) : item.allocatedQuantity > 0 ? (
+                      <span className="stock stock--in">已锁定 {item.allocatedQuantity} 件</span>
                     ) : null}
                   </div>
                   <label className="cart-quantity">
@@ -296,15 +249,15 @@ export default function CartPage() {
                       type="number"
                       min="1"
                       max={product!.stock || 1}
-                      value={item.quantity}
+                      value={item.requestedQuantity}
                       onChange={(event) => {
                         const quantity = Math.max(
                           1,
                           Math.min(product!.stock || 1, Number(event.target.value) || 1)
                         );
-                        persist(
+                        applyItems(
                           items.map((entry) =>
-                            entry.id === item.id ? { ...entry, quantity } : entry
+                            entry.skuId === item.skuId ? { ...entry, requestedQuantity: quantity } : entry
                           )
                         );
                       }}
@@ -314,7 +267,7 @@ export default function CartPage() {
                   <button
                     className="cart-remove"
                     type="button"
-                    onClick={() => persist(items.filter((entry) => entry.id !== item.id))}
+                    onClick={() => applyItems(items.filter((entry) => entry.skuId !== item.skuId))}
                   >
                     移除
                   </button>
@@ -356,14 +309,6 @@ export default function CartPage() {
           ) : null}
 
           <div className="cart-total__foot">
-            {!authLoading && !user ? (
-              <>
-                <p className="cart-total__hint">登录后即可付款。</p>
-                <button className="cart-total__login" type="button" onClick={openLogin}>
-                  登录
-                </button>
-              </>
-            ) : null}
             {user && !user.isAuthorized ? (
               <p className="cart-total__notice">尚未完成下单授权，请前往「订单」页完成授权。</p>
             ) : null}
@@ -374,7 +319,7 @@ export default function CartPage() {
                 quoteState !== "ready" ||
                 !user?.isAuthorized ||
                 submitting ||
-                selectedItems.length === 0
+                items.length === 0
               }
               onClick={createOrder}
             >

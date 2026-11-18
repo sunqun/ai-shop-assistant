@@ -12,7 +12,7 @@ function errorResponse(status: number, code: string, message: string) {
 export async function POST(request: Request) {
   const session = await readSession();
   if (!session) return errorResponse(401, "UNAUTHENTICATED", "请先登录后再加入购物车。");
-  let body: { cartToken?: unknown; items?: unknown; idempotencyKey?: unknown };
+  let body: { items?: unknown; idempotencyKey?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -22,19 +22,17 @@ export async function POST(request: Request) {
     return errorResponse(400, "INVALID_CART_REQUEST", "购物车请求无效。");
   }
   if (
-    typeof body.cartToken !== "string" ||
     typeof body.idempotencyKey !== "string" ||
     body.idempotencyKey.length < 1 ||
     body.idempotencyKey.length > 128
   ) {
-    return errorResponse(400, "INVALID_CART_REQUEST", "购物车凭证和幂等键不能为空。");
+    return errorResponse(400, "INVALID_CART_REQUEST", "幂等键不能为空。");
   }
   if (!Array.isArray(body.items)) return errorResponse(400, "INVALID_CART_ITEMS", "购物车商品列表无效。");
 
   try {
     return NextResponse.json(
       await reconcileCart({
-        cartToken: body.cartToken,
         userid: session.userid,
         items: body.items,
         idempotencyKey: body.idempotencyKey,

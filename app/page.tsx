@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDock } from "@/components/assistant-dock";
 import type { CatalogProduct } from "@/lib/catalog";
-import { addToCartAndPersist } from "@/lib/cart-client";
+import { addToCart } from "@/lib/cart-client";
 import { showToast } from "@/lib/toast";
 import {
   AirVent,
@@ -115,7 +115,7 @@ export default function HomePage() {
     const target = document.querySelector<HTMLElement>("[data-cart-target]");
     setAddingId(product.id);
     try {
-      await addToCartAndPersist(
+      await addToCart(
         { id: product.id, quantity: 1, sku: product.id },
         product.stock,
       );
@@ -146,10 +146,6 @@ export default function HomePage() {
             <span className="shop-intro__visual-chip shop-intro__visual-chip--left"><LampDesk size={15} /> 居家生活</span>
             <span className="shop-intro__visual-chip shop-intro__visual-chip--right"><Coffee size={15} /> 食品飲料</span>
           </div>
-          <div className="shop-intro__count" aria-live="polite">
-            <strong>{productsState === "ready" ? filteredProducts.length : "—"}</strong>
-            <span>件商品</span>
-          </div>
         </div>
         <div className="shop-body">
           <aside className="shop-filters" aria-label="商品筛选">
@@ -178,7 +174,6 @@ export default function HomePage() {
             <div className="results-header">
               <div className="results-header__heading">
                 <span className="results-header__title"><Package size={15} />商品</span>
-                <span className="results-header__count">{productsState === "ready" ? `${filteredProducts.length} 个结果` : "正在载入"}</span>
               </div>
               <label className="shop-search">
                 <span className="sr-only">搜索商品</span>

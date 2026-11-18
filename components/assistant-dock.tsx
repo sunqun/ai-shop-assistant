@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { reconcileAiCart, quoteAiCart, submitAiOrder } from "@/lib/ai-cart-client";
-import { addToCartAndPersist } from "@/lib/cart-client";
+import { addToCart as persistCartItem } from "@/lib/cart-client";
 import { useOptionalAuth } from "@/components/auth-provider";
 import {
   createPaymentLink,
@@ -211,7 +211,7 @@ export function AssistantDock({ embedded = false }: { embedded?: boolean }) {
     }
     setAddingId(product.id);
     try {
-      const result = await addToCartAndPersist(
+      const result = await persistCartItem(
         { id: product.id, quantity: aiQuantity, sku: product.id },
         product.stock
       );

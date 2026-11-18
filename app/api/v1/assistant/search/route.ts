@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       products: result.data.products,
       nextCursor: result.data.nextCursor,
       intentSummary: makeIntentSummary(result.intent),
+      searchMode: result.searchMode,
     });
   } catch (error) {
     console.error("assistant product search failed", error instanceof Error ? error.message : "unknown error");

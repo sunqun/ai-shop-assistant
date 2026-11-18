@@ -107,9 +107,18 @@ function baseUrl(): string {
     : `${requiredEnv("MODEL_BASE_URL").replace(/\/$/, "")}/chat/completions`;
 }
 
-export async function parseProductSearchIntent(query: string): Promise<ProductSearchIntent> {
+export type ProductSearchMode = "model" | "fallback";
+
+export async function parseProductSearchIntentWithMode(
+  query: string
+): Promise<{ intent: ProductSearchIntent; searchMode: ProductSearchMode }> {
   const normalizedQuery = query.trim().slice(0, MAX_QUERY_LENGTH);
-  if (!normalizedQuery) return { keywords: [], specTerms: [], inStockOnly: false };
+  if (!normalizedQuery) {
+    return {
+      intent: { keywords: [], specTerms: [], inStockOnly: false },
+      searchMode: "fallback",
+    };
+  }
 
   // LLM 只负责把自然语言转换成结构化条件，不接触商品数据和内部推荐字段。
   try {
@@ -143,13 +152,21 @@ export async function parseProductSearchIntent(query: string): Promise<ProductSe
         ? data.choices[0].message.content
         : null;
     if (typeof content !== "string") throw new Error("LLM response did not include intent content");
-    return applyQueryFallback(normalizeIntent(extractJson(content)), normalizedQuery);
+    return {
+      intent: applyQueryFallback(normalizeIntent(extractJson(content)), normalizedQuery),
+      searchMode: "model",
+    };
   } catch (error) {
     // 模型暂不可用时仅允许短商品词降级检索，查询仍走真实目录数据库。
     const degraded = fallbackIntent(normalizedQuery);
     if (!degraded.keywords.length) throw error;
-    return degraded;
+    return { intent: degraded, searchMode: "fallback" };
   }
+}
+
+export async function parseProductSearchIntent(query: string): Promise<ProductSearchIntent> {
+  const { intent } = await parseProductSearchIntentWithMode(query);
+  return intent;
 }
 
 export function makeIntentSummary(intent: ProductSearchIntent): string {

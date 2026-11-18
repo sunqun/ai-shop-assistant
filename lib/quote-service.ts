@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
-import { deriveCartId } from "@/lib/cart-session";
+import { deriveUserCartId } from "@/lib/cart-session";
 import { getDbPool } from "@/lib/db";
 import { calculateBestQuote, lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCatalogProducts } from "@/lib/catalog";
@@ -19,9 +19,9 @@ function asDate(value: Date | string | null) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export async function quoteCart(input: { userid: string; cartToken: string; cartVersion: number; expectedSource?: "WEB" | "AI" }): Promise<AiQuoteToolOutput> {
+export async function quoteCart(input: { userid: string; cartVersion: number; expectedSource?: "WEB" | "AI" }): Promise<AiQuoteToolOutput> {
   let cartId: string;
-  try { cartId = deriveCartId(input.cartToken, input.expectedSource ?? "WEB"); } catch (error) { throw new QuoteServiceError(error instanceof Error && error.message === "CART_SESSION_UNAVAILABLE" ? "CART_SESSION_UNAVAILABLE" : "INVALID_CART_TOKEN"); }
+  try { cartId = deriveUserCartId(input.userid, input.expectedSource ?? "WEB"); } catch { throw new QuoteServiceError("CART_SESSION_UNAVAILABLE"); }
   const connection = await getDbPool().getConnection();
   try {
     await connection.beginTransaction();

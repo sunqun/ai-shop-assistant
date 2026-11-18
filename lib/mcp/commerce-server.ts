@@ -14,14 +14,10 @@ import type {
 
 export type CommerceToolContext = { userid?: string };
 
-const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEY_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 function validKey(value: unknown): value is string {
   return typeof value === "string" && KEY_RE.test(value);
-}
-function validToken(value: unknown): value is string {
-  return typeof value === "string" && TOKEN_RE.test(value);
 }
 function validVersion(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1;
@@ -109,7 +105,6 @@ export async function callCommerceTool(
         return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再继续操作。" } };
       if (
         !input ||
-        !validToken(input.cartToken) ||
         !validItems(input.items) ||
         !validKey(input.idempotencyKey)
       ) {
@@ -127,7 +122,7 @@ export async function callCommerceTool(
       const input = call.arguments as AiQuoteCartToolInput;
       if (!validUserid(context.userid))
         return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再继续操作。" } };
-      if (!input || !validToken(input.cartToken) || !validVersion(input.cartVersion)) {
+      if (!input || !validVersion(input.cartVersion)) {
         return {
           ok: false,
           error: { code: "MCP_INVALID_ARGUMENTS", message: "AI 报价参数无效。" },
@@ -143,7 +138,6 @@ export async function callCommerceTool(
       return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再提交订单。" } };
     if (
       !input ||
-      !validToken(input.cartToken) ||
       !validVersion(input.cartVersion) ||
       !UUID_RE.test(input.quoteId) ||
       !validKey(input.idempotencyKey)

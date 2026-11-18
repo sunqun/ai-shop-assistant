@@ -146,11 +146,11 @@ export async function submitPaymentLinkOrder(input: { token: string; paymentPass
     await connection.beginTransaction();
     const row = await readLinkForUpdate(connection, input.token);
     if (!row) throw new PaymentLinkError("PAYMENT_LINK_NOT_FOUND");
-    const link = { view: await toView(row), ownerId: String(row.userid), cartToken: String(row.cart_token) };
-    const cart = await reconcileCart({ userid: link.ownerId, cartToken: link.cartToken, items: [{ id: link.view.product.id, quantity: link.view.quantity }], idempotencyKey: `link-reconcile-${input.idempotencyKey}`, source: "AI" });
+    const link = { view: await toView(row), ownerId: String(row.userid) };
+    const cart = await reconcileCart({ userid: link.ownerId, items: [{ id: link.view.product.id, quantity: link.view.quantity }], idempotencyKey: `link-reconcile-${input.idempotencyKey}`, source: "AI" });
     if (cart.fullyOutOfStock || !cart.allocations.some((item) => item.allocatedQuantity > 0)) throw new PaymentLinkError("OUT_OF_STOCK");
-    const quote = await quoteCart({ userid: link.ownerId, cartToken: link.cartToken, cartVersion: cart.cartVersion, expectedSource: "AI" });
-    const order = await submitAiOrder({ userid: link.ownerId, cartToken: link.cartToken, cartVersion: cart.cartVersion, quoteId: quote.quote.quoteId, idempotencyKey: `link-order-${input.idempotencyKey}` });
+    const quote = await quoteCart({ userid: link.ownerId, cartVersion: cart.cartVersion, expectedSource: "AI" });
+    const order = await submitAiOrder({ userid: link.ownerId, cartVersion: cart.cartVersion, quoteId: quote.quote.quoteId, idempotencyKey: `link-order-${input.idempotencyKey}` });
     const [consumed] = await connection.execute<ResultSetHeader>(
       "UPDATE payment_links SET deleted_at = CURRENT_TIMESTAMP WHERE link_id = ? AND deleted_at IS NULL",
       [link.view.linkId],

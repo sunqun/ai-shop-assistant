@@ -2,16 +2,31 @@ import { createHash, randomUUID } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getDbPool } from "@/lib/db";
 import { allocateCartLines, normalizeCartLines, type StockBalance } from "@/lib/inventory-domain";
-import { deriveCartId } from "@/lib/cart-session";
+import { deriveUserCartId } from "@/lib/cart-session";
 
 export type CartSource = "WEB" | "AI";
 export type CartMutationItem = { id?: unknown; quantity?: unknown };
 export type ReconcileCartInput = {
   userid: string;
-  cartToken: string;
   items: CartMutationItem[];
   idempotencyKey: string;
   source: CartSource;
+};
+
+export type UserCartItem = {
+  skuId: string;
+  productId: string;
+  requestedQuantity: number;
+  allocatedQuantity: number;
+  unavailableQuantity: number;
+};
+
+export type UserCartView = {
+  cartId: string;
+  source: CartSource;
+  cartVersion: number;
+  expiresAt: string | null;
+  items: UserCartItem[];
 };
 
 export type ReconcileCartResult = {
@@ -41,9 +56,9 @@ export class CartServiceError extends Error {
 export async function reconcileCart(input: ReconcileCartInput): Promise<ReconcileCartResult> {
   let cartId: string;
   try {
-    cartId = deriveCartId(input.cartToken, input.source);
-  } catch (error) {
-    throw new CartServiceError(error instanceof Error && error.message === "CART_SESSION_UNAVAILABLE" ? "CART_SESSION_UNAVAILABLE" : "INVALID_CART_TOKEN");
+    cartId = deriveUserCartId(input.userid, input.source);
+  } catch {
+    throw new CartServiceError("CART_SESSION_UNAVAILABLE");
   }
 
   let lines: ReturnType<typeof normalizeCartLines>;
@@ -172,6 +187,53 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
   } catch (error) {
     await connection.rollback();
     throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getUserCart(userid: string, source: CartSource): Promise<UserCartView> {
+  const cartId = deriveUserCartId(userid, source);
+  const connection = await getDbPool().getConnection();
+  try {
+    const [cartRows] = await connection.query<RowDataPacket[]>(
+      "SELECT cart_id, source, cart_version, expires_at FROM carts WHERE cart_id = ? AND userid = ?",
+      [cartId, userid]
+    );
+    const cart = cartRows[0];
+    if (!cart) {
+      return { cartId, source, cartVersion: 0, expiresAt: null, items: [] };
+    }
+    const [itemRows] = await connection.query<
+      (RowDataPacket & {
+        sku_id: string;
+        product_id: string;
+        requested_quantity: number;
+        allocated_quantity: number;
+        unavailable_quantity: number;
+      })[]
+    >(
+      "SELECT ci.sku_id, s.product_id, ci.requested_quantity, ci.allocated_quantity, ci.unavailable_quantity FROM cart_items ci INNER JOIN inventory_skus s ON s.sku_id = ci.sku_id WHERE ci.cart_id = ? ORDER BY ci.sku_id",
+      [cartId]
+    );
+    return {
+      cartId,
+      source: cart.source,
+      cartVersion: Number(cart.cart_version),
+      expiresAt:
+        cart.expires_at instanceof Date
+          ? cart.expires_at.toISOString()
+          : cart.expires_at
+            ? String(cart.expires_at)
+            : null,
+      items: itemRows.map((row) => ({
+        skuId: String(row.sku_id),
+        productId: String(row.product_id),
+        requestedQuantity: Number(row.requested_quantity),
+        allocatedQuantity: Number(row.allocated_quantity),
+        unavailableQuantity: Number(row.unavailable_quantity),
+      })),
+    };
   } finally {
     connection.release();
   }
