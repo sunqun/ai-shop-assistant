@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/auth-server";
-import { deletePaymentLink, PaymentLinkError } from "@/lib/payment-link-service";
+import { readSession } from "@/lib/auth/auth-server";
+import { deletePaymentLink, PaymentLinkError } from "@/lib/payment-link/payment-link-service";
 
 export const runtime = "nodejs";
 

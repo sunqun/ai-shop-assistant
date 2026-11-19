@@ -21,6 +21,5 @@ export async function GET() {
         status: "configured",
       },
     ],
-    notice: "商品价格与库存以结账前最新状态为准。",
   });
 }

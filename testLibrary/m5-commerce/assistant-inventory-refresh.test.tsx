@@ -2,21 +2,30 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/toast-provider";
 
-vi.mock("@/lib/ai-cart-client", () => ({
-  reconcileAiCart: vi.fn(async () => ({
-    fullyOutOfStock: false,
-    allocations: [{ allocatedQuantity: 1 }],
-    cartVersion: 1,
+vi.mock("@/lib/cart-client/api", () => ({
+  reconcileAiCartRequest: vi.fn(async () => ({
+    success: true,
+    data: {
+      fullyOutOfStock: false,
+      allocations: [{ allocatedQuantity: 1 }],
+      cartVersion: 1,
+    },
   })),
-  quoteAiCart: vi.fn(async () => ({ quote: { quoteId: "quote" } })),
-  submitAiOrder: vi.fn(async () => ({ orderGroupId: "order" })),
+  quoteAiCartRequest: vi.fn(async () => ({
+    success: true,
+    data: { quote: { quoteId: "quote" } },
+  })),
+  submitAiOrderRequest: vi.fn(async () => ({
+    success: true,
+    data: { orderGroupId: "order" },
+  })),
 }));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-import { AssistantDock } from "@/components/assistant-dock";
+import { AssistantDocker } from "@/components/assistant-docker";
 
 const product = {
   id: "desk-kit",
@@ -47,7 +56,7 @@ describe("assistant inventory refresh", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "idempotency-key", getRandomValues: (value: Uint8Array) => value });
     vi.stubGlobal("localStorage", { getItem: () => "a".repeat(43), setItem: vi.fn() });
 
-    render(<ToastProvider><AssistantDock /></ToastProvider>);
+    render(<ToastProvider><AssistantDocker /></ToastProvider>);
     fireEvent.change(screen.getByLabelText("描述你想找的商品"), { target: { value: "coffee" } });
     fireEvent.click(screen.getByRole("button", { name: "查找商品" }));
     const paymentButtons = await screen.findAllByRole("button", { name: "付款" });
@@ -66,7 +75,7 @@ describe("assistant inventory refresh", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "idempotency-key", getRandomValues: (value: Uint8Array) => value });
     vi.stubGlobal("localStorage", { getItem: () => "a".repeat(43), setItem: vi.fn() });
 
-    render(<ToastProvider><AssistantDock /></ToastProvider>);
+    render(<ToastProvider><AssistantDocker /></ToastProvider>);
     fireEvent.change(screen.getByLabelText("描述你想找的商品"), { target: { value: "desk kit" } });
     fireEvent.click(screen.getByRole("button", { name: "查找商品" }));
     fireEvent.click(await screen.findByRole("button", { name: "付款" }));
@@ -85,7 +94,7 @@ describe("assistant inventory refresh", () => {
     vi.stubGlobal("crypto", { randomUUID: () => "idempotency-key", getRandomValues: (value: Uint8Array) => value });
     vi.stubGlobal("localStorage", { getItem: () => "a".repeat(43), setItem: vi.fn() });
 
-    render(<ToastProvider><AssistantDock /></ToastProvider>);
+    render(<ToastProvider><AssistantDocker /></ToastProvider>);
     fireEvent.change(screen.getByLabelText("描述你想找的商品"), { target: { value: "desk kit" } });
     fireEvent.click(screen.getByRole("button", { name: "查找商品" }));
     fireEvent.click(await screen.findByRole("button", { name: "付款" }));

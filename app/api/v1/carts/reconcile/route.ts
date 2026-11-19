@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { CartServiceError, reconcileCart } from "@/lib/cart-service";
-import { readSession } from "@/lib/auth-server";
+import { CartServiceError, reconcileCart } from "@/lib/cart-service/cart-service";
+import { readSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";
 

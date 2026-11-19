@@ -1,4 +1,4 @@
-import { reconcileCart, CartServiceError } from "@/lib/cart-service";
+import { reconcileCart, CartServiceError } from "@/lib/cart-service/cart-service";
 import { quoteCart, QuoteServiceError } from "@/lib/quote-service";
 import { submitAiOrder, OrderServiceError } from "@/lib/order-service";
 import type {

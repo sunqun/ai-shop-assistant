@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { callAiQuoteCartTool } from "@/lib/mcp/client";
-import { readSession } from "@/lib/auth-server";
+import { readSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";
 

@@ -8,7 +8,7 @@
 - TanStack Query 管理商品、登录用户、授权、购物车、报价、拆单和订单记录的服务端状态。
 - Zustand 只管理助手面板和临时界面状态；React Hook Form + Zod 管理表单。授权、库存、订单创建结果不由本地状态裁决。
 - 样式建议使用 CSS Modules + 统一主题变量，优先复用可访问的 Dialog、Checkbox、Alert、Table 等组件，保证功能可用。
-- AI 助手作为 `AssistantDock` 独立于全站顶部导航；右侧展开宽度建议固定为 360px。首页 `/` 上助手占据页面位置（不浮动遮罩）且默认展开，收起后显示右下角可拖动卡通小精灵入口。面板使用 CSS transform/opacity 过渡，不依赖顶部搜索框。
+- AI 助手作为 `AssistantDocker` 独立于全站顶部导航；右侧展开宽度建议固定为 360px。首页 `/` 上助手占据页面位置（不浮动遮罩）且默认展开，收起后显示右下角可拖动卡通小精灵入口。面板使用 CSS transform/opacity 过渡，不依赖顶部搜索框。
 - Vitest + Testing Library 验证交互；Playwright 覆盖登录授权、交接、订单记录创建及“我的”查看流程。
 
 ## 2. 页面、路由与主要组件
@@ -19,14 +19,13 @@
 | `/account`                        | “我的”账户中心，订单记录概览、AI 自助下单授权入口                                                               | 登录用户                                             |
 | `/account/orders`                 | 我的订单记录列表，按创建时间查看                                                                                | 登录用户                                             |
 | `/products/:productId`            | 规格库存、脱敏评论分页                                                                                         | 公开                                                 |
-| `/cart`                           | 购物车商品数量和报价状态                                                                                       | session 或受限购物车凭证                             |
-| `/checkout`                       | 商品与报价摘要、订单记录创建说明                                                                              | 购物车访问权限                                       |
+| `/cart`                           | 购物车商品数量和报价状态                                                                                       | session 或受限购物车凭证                             |                                                                       | 购物车访问权限                                       |
 | `/handoff/:token`                 | 长期交接入口                                                                                                   | 无需登录查看绑定内容；建单必须登录并通过授权字段检查 |
 | `/orders/:orderGroupId/result`    | 单条订单记录创建回执、订单编号和时间                                                                            | 当前用户 session                                     |
 | `/orders/:orderGroupId`           | 单条订单记录详情、商品摘要和创建时间                                                                            | 当前用户 session                                     |
-| 全站停靠组件                      | `AssistantDock`、`AssistantLauncher`、`SearchResultList`、`ProductResultCard`、`AssistantComposer`、`LoginDialog` | 商品搜索公开；AI 下单由 M5/M6 服务端契约负责         |
+| 全站停靠组件                      | `AssistantDocker`、`AssistantLauncher`、`SearchResultList`、`ProductResultCard`、`AssistantComposer`、`LoginDialog` | 商品搜索公开；AI 下单由 M5/M6 服务端契约负责         |
 
-建议目录：`app/`（layout、page、loading、error、动态路由）、`features/{auth,promotion,catalog,cart,checkout,orders}/`、`shared/{api,ui,types}/`。不在组件中重复实现优惠和库存算法。
+建议目录：`app/`（layout、page、loading、error、动态路由）、`features/{auth,promotion,catalog,cart,orders}/`、`shared/{api,ui,types}/`。不在组件中重复实现优惠和库存算法。
 
 ### 2.1 布局基线与视觉方向
 
@@ -64,7 +63,7 @@
 | 我的订单 `/account/orders`              | 按时间倒序展示订单记录、订单编号、商品摘要与创建结果；支持分页和空状态                                                                                                        | “查看订单”                                     |
 | 商品详情 `/products/:productId`         | 上部左右各半：图片画廊 / 名称、价格、规格、库存、数量、加入购物车；下部商品说明及脱敏评论                                                                                                                                     | “加入购物车”                                                                     |
 | 购物车 `/cart`                          | 标题后为库存和报价提醒；左区约 8/12 商品列表，右区约 4/12 费用和结账入口                                                                                                                                | “去结账”                                                                         |
-| 结账 `/checkout`                        | 顶部变价提醒；左区约 8/12 商品清单；右区约 4/12 报价摘要及订单记录创建说明                                                                                                                             | “付款”                                                                         |
+                                                                        |
 | 交接 `/handoff/:token`                  | 复用结账骨架，顶部增加“AI 已准备购物内容”及校验状态；仅展示链接绑定的内容，提交建单时要求登录和授权                                                                                                                           | 查看不要求登录；建单按统一门禁校验                                               |
 | 下单回执 `/orders/:orderGroupId/result` | 展示“订单已创建，支付未接入”、一条订单编号及创建时间                                                                                                                                                                         | “查看订单详情”“继续购物”                                                         |
 | 订单详情 `/orders/:orderGroupId`        | 顶部订单编号及创建时间；左区约 8/12 商品、规格、数量；右区约 4/12 已保存的金额摘要                                                                                                                                          | “返回商品列表”                                                                 |
@@ -147,18 +146,6 @@
 │                                │ [去结账]           │
 └────────────────────────────────┴───────────────────┘
 
-结账 /checkout 和交接 /handoff/:token
-┌────────────────────────────────────────────────────┐
-│ 结账 / AI 购物交接说明（仅交接页）                   │
-│ 库存/报价变化提醒                                │
-├────────────────────────────────┬───────────────────┤
-│ 本次购买清单：图/名称/规格/数量 │ 报价摘要           │
-│                                │ 商品金额           │
-│                                │ 优惠逐项列出       │
-│                                │ 运费 / 订单金额    │
-│                                │ 订单金额           │
-│                                │ [付款]             │
-└────────────────────────────────┴───────────────────┘
 ```
 
 桌面摘要可在视口内吸顶，但内容超高时回到正常文档流。关键购买内容和库存/报价提醒始终在页面主内容或费用摘要中可见。锁库过期在原提醒区域显示“需要重新校验”，不清空用户已填表单；报价更新时原地展示变化前后值，并在手动路径重新确认前禁用下单。报价加载及提交中展示明确文案，避免金额更新时仍可提交旧报价。
@@ -226,14 +213,14 @@
 
 ```
 
-- 首页 `/` 默认展开，`AssistantDock` 占据视口右侧固定宽度，主内容区预留该宽度，避免遮住商品操作；其他页面助手以右侧停靠形态出现。收起动画建议约 220ms，面板淡出并收敛为右下角 `AssistantLauncher`（卡通小精灵）。
+- 首页 `/` 默认展开，`AssistantDocker` 占据视口右侧固定宽度，主内容区预留该宽度，避免遮住商品操作；其他页面助手以右侧停靠形态出现。收起动画建议约 220ms，面板淡出并收敛为右下角 `AssistantLauncher`（卡通小精灵）。
 - 卡通小精灵入口建议 56×56px，默认距右、下各 16px。形象建议为圆润的卡通小精灵：大眼睛、柔和轮廓、品牌主色点缀，收起/悬停带轻微弹跳或眨眼动画，展开后隐藏。小精灵可拖动，松手后吸附最近边缘并夹在视口内，位置保存为本地界面偏好；提供恢复默认位置。键盘焦点下 Enter/Space 打开，Escape 收起。
 - 支持 `prefers-reduced-motion`；拖动使用 Pointer Events 和 pointer capture，不能仅以拖动作为唯一打开方式。
 - 面板头部展示助手名/状态和收起按钮。结果区统一展示服务端返回的相关商品列表，不提供比较按钮、比较抽屉或比较状态。
 - 结果区独立 `overflow-y: auto` 并支持下拉加载（pageSize 默认 20、最大 100）；商品卡提供打开详情入口，并展示商品名称、公开价格/价格摘要、规格摘要、库存状态、脱敏评论摘要/评论入口和 Agent 相关理由。
 - 底部 `AssistantComposer` 固定，当前实现使用单行输入框；发送、重试状态原位反馈，取消请求作为后续增强项。
 
-设计组件：`AssistantDock`、`AssistantHeader`、`ProductResultCard`、`SearchResultList`、`AssistantComposer`、`AssistantLauncher`。当前实现以 React 本地 state 管理助手交互，尚未接入 Zustand 或 TanStack Query；后续引入状态库时仍不得把推荐分数、毛利、内部权重或订单状态放进前端状态。
+设计组件：`AssistantDocker`、`AssistantHeader`、`ProductResultCard`、`SearchResultList`、`AssistantComposer`、`AssistantLauncher`。当前实现以 React 本地 state 管理助手交互，尚未接入 Zustand 或 TanStack Query；后续引入状态库时仍不得把推荐分数、毛利、内部权重或订单状态放进前端状态。
 
 商品卡只渲染服务端允许公开的字段。缺失信息显示“暂无数据”，不由前端推断质量、配送承诺、库存承诺或价格；用户可打开商品详情查看规格与全部可展示评论。
 

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useAuth } from "@/components/auth-provider";
-import { fetchCart } from "@/lib/cart-client";
+import { useAuth } from "@/components/auth";
+import { fetchCartRequest } from "@/lib/cart-client/api";
 
 export function CartCount() {
   const { user } = useAuth();
@@ -14,22 +14,23 @@ export function CartCount() {
       setCount(0);
       return;
     }
-    try {
-      const cart = await fetchCart();
-      const next = cart.items.reduce(
-        (total, item) => total + Math.max(0, item.requestedQuantity),
-        0
-      );
-      setCount((previous) => {
-        if (next !== previous) {
-          setBumped(true);
-          window.setTimeout(() => setBumped(false), 420);
-        }
-        return next;
-      });
-    } catch {
+    const result = await fetchCartRequest();
+    if (!result.success) {
       setCount(0);
+      return;
     }
+    const cart = result.data;
+    const next = cart.items.reduce(
+      (total, item) => total + Math.max(0, item.requestedQuantity),
+      0
+    );
+    setCount((previous) => {
+      if (next !== previous) {
+        setBumped(true);
+        window.setTimeout(() => setBumped(false), 420);
+      }
+      return next;
+    });
   }, [user]);
 
   useEffect(() => {

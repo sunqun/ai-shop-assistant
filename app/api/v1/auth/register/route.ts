@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createUser } from "@/lib/user-repository";
-import { hashPassword } from "@/lib/password";
-import { assertSessionReady, setSession } from "@/lib/auth-server";
+import { createUser } from "@/lib/auth/user-repository";
+import { hashPassword } from "@/lib/auth/password";
+import { assertSessionReady, setSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";
 

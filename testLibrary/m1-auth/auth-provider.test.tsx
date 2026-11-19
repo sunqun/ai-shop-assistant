@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { AuthProvider, LoginButton } from "@/components/auth-provider";
+import { AuthProvider, LoginButton } from "@/components/auth";
 
 function mockSession(user: { userid: string; username: string; isAuthorized: boolean } | null) {
   vi.stubGlobal(

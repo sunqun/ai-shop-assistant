@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { LanguageProvider } from "@/components/language-provider";
-import { AuthProvider } from "@/components/auth-provider";
+import { AuthProvider } from "@/components/auth";
 import { ToastProvider } from "@/components/toast-provider";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader } from "@/components/home/site-header";
 import "./globals.css";
 
 export const metadata: Metadata = {

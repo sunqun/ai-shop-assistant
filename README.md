@@ -11,16 +11,6 @@ npm run dev
 
 打开 <http://localhost:3000>。
 
-## 已提供路由
-
-- `/` 首页
-- `/login`、`/authorize` 身份与授权入口
-- `/products`、`/products/:productId` 商品列表和详情
-- `/cart`、`/checkout` 购物车和结账入口
-- `/handoff/:token` 交接入口
-- `/account`、`/account/orders` 我的中心及订单记录
-- `/orders/:orderGroupId` 订单记录详情与创建回执
-
 ## 验证
 
 ```bash

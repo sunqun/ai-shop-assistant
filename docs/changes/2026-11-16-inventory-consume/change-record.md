@@ -14,7 +14,6 @@
 - `app/api/v1/carts/order/route.ts`
 - `app/api/v1/assistant/order/route.ts`
 - `lib/mcp/commerce-server.ts`
-- `app/checkout/page.tsx`
 - `components/assistant-dock.tsx`
 - `app/layout.tsx`
 - `app/globals.css`

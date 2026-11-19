@@ -46,7 +46,7 @@ export type AiSubmitOrderToolInput = {
   quoteId: string;
   idempotencyKey: string;
 };
-export type AiCartToolOutput = import("@/lib/cart-service").ReconcileCartResult;
+export type AiCartToolOutput = import("@/lib/cart-service/cart-service").ReconcileCartResult;
 export type AiQuoteToolOutput = {
   quote: {
     quoteId: string;
