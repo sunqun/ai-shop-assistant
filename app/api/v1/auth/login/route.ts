@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { setSession } from "@/lib/auth-server";
-import { verifyPassword } from "@/lib/password";
-import { findUserByUsername, authorizeUser } from "@/lib/user-repository";
+import { setSession } from "@/lib/auth/auth-server";
+import { verifyPassword } from "@/lib/auth/password";
+import { findUserByUsername, authorizeUser } from "@/lib/auth/user-repository";
 
 export const runtime = "nodejs";
 

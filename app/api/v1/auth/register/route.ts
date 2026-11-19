@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createUser } from "@/lib/user-repository";
-import { hashPassword } from "@/lib/password";
-import { setSession } from "@/lib/auth-server";
+import { createUser } from "@/lib/auth/user-repository";
+import { hashPassword } from "@/lib/auth/password";
+import { assertSessionReady, setSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";
 
@@ -31,6 +31,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "两次输入的密码不一致" }, { status: 400 });
 
   try {
+    // Validate this before inserting so a missing production secret cannot
+    // create an account that cannot receive a session.
+    assertSessionReady();
     const user = await createUser(username, await hashPassword(password));
     await setSession(user.userid);
     return NextResponse.json(

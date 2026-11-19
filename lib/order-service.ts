@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getDbPool } from "@/lib/db";
-import { deriveCartId } from "@/lib/cart-session";
+import { deriveUserCartId } from "@/lib/cart-service/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
 import { lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
 import type { AiOrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
@@ -186,20 +186,15 @@ export async function getUserOrder(
 
 export async function submitWebOrder(input: {
   userid: string;
-  cartToken: string;
   cartVersion: number;
   quoteId: string;
   idempotencyKey: string;
 }): Promise<WebOrderToolOutput> {
   let cartId: string;
   try {
-    cartId = deriveCartId(input.cartToken, "WEB");
-  } catch (error) {
-    throw new OrderServiceError(
-      error instanceof Error && error.message === "CART_SESSION_UNAVAILABLE"
-        ? "CART_SESSION_UNAVAILABLE"
-        : "INVALID_CART_TOKEN"
-    );
+    cartId = deriveUserCartId(input.userid, "WEB");
+  } catch {
+    throw new OrderServiceError("CART_SESSION_UNAVAILABLE");
   }
   const connection = await getDbPool().getConnection();
   try {
@@ -331,20 +326,15 @@ export async function submitWebOrder(input: {
 
 export async function submitAiOrder(input: {
   userid: string;
-  cartToken: string;
   cartVersion: number;
   quoteId: string;
   idempotencyKey: string;
 }): Promise<AiOrderToolOutput> {
   let cartId: string;
   try {
-    cartId = deriveCartId(input.cartToken, "AI");
-  } catch (error) {
-    throw new OrderServiceError(
-      error instanceof Error && error.message === "CART_SESSION_UNAVAILABLE"
-        ? "CART_SESSION_UNAVAILABLE"
-        : "INVALID_CART_TOKEN"
-    );
+    cartId = deriveUserCartId(input.userid, "AI");
+  } catch {
+    throw new OrderServiceError("CART_SESSION_UNAVAILABLE");
   }
   const connection = await getDbPool().getConnection();
   try {

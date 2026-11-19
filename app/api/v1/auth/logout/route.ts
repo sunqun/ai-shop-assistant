@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { clearSession } from "@/lib/auth-server";
+import { clearSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";
 

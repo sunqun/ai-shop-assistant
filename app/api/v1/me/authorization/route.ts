@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/auth-server";
-import { authorizeUser, findUserById } from "@/lib/user-repository";
+import { readSession } from "@/lib/auth/auth-server";
+import { authorizeUser, findUserById } from "@/lib/auth/user-repository";
 
 export const runtime = "nodejs";
 

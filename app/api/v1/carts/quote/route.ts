@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { QuoteServiceError, quoteCart } from "@/lib/quote-service";
-import { readSession } from "@/lib/auth-server";
+import { readSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";
 
 type QuoteRequest = {
-  cartToken?: unknown;
   cartVersion?: unknown;
 };
 
@@ -28,11 +27,11 @@ export async function POST(request: Request) {
     return errorResponse(400, "INVALID_QUOTE_REQUEST", "报价请求无效。");
   }
 
-  if (typeof body.cartToken !== "string" || !Number.isSafeInteger(body.cartVersion) || (body.cartVersion as number) < 1) {
-    return errorResponse(400, "INVALID_QUOTE_REQUEST", "购物车凭证和版本不能为空。");
+  if (!Number.isSafeInteger(body.cartVersion) || (body.cartVersion as number) < 1) {
+    return errorResponse(400, "INVALID_QUOTE_REQUEST", "购物车版本不能为空。");
   }
   try {
-    return NextResponse.json(await quoteCart({ userid: session.userid, cartToken: body.cartToken, cartVersion: body.cartVersion as number, expectedSource: "WEB" }));
+    return NextResponse.json(await quoteCart({ userid: session.userid, cartVersion: body.cartVersion as number, expectedSource: "WEB" }));
   } catch (error) {
     if (error instanceof QuoteServiceError) {
       const status = error.code === "CART_NOT_FOUND" ? 404 : ["CART_CHANGED", "CART_RESERVATION_EXPIRED", "OUT_OF_STOCK"].includes(error.code) ? 409 : error.code === "PRICING_CATALOG_UNAVAILABLE" ? 503 : 400;

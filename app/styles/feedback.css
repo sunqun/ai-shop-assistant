@@ -1,0 +1,8 @@
+/* Toast notifications and status feedback. */
+/* Toast */
+.toast-stack { position: fixed; top: 80px; right: 24px; z-index: 200; display: grid; gap: 10px; width: min(360px, calc(100% - 48px)); }
+.toast { padding: 12px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text); font-size: 14px; line-height: 1.5; }
+.toast--error { border-color: var(--danger); color: var(--danger); }
+.toast--success { border-color: var(--success); color: var(--success); }
+.toast--info { border-color: var(--primary-border); color: var(--primary-dark); }
+

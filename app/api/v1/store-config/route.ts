@@ -17,10 +17,9 @@ export async function GET() {
       },
       {
         id: "ai-order-discount",
-        label: "AI 助理自动创建订单额外 95 折（M4）",
+        label: "AI 助理自动创建订单额外 95 折",
         status: "configured",
       },
     ],
-    notice: "商品价格与库存以结账前最新状态为准。",
   });
 }

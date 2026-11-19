@@ -1,0 +1,120 @@
+/* Authentication controls, dialogs, and order access states. */
+.auth-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.auth-header__name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--modal-overlay);
+}
+.auth-dialog {
+  width: min(440px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.auth-dialog__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 24px 24px 0;
+}
+.auth-dialog__header h2 {
+  margin: 0;
+  font-size: 26px;
+}
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.auth-dialog__form {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+}
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+.checkbox-row input {
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+}
+.form-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+.auth-mode-switch {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+}
+.auth-mode-switch:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+.orders-auth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 22px;
+  margin-bottom: 28px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.orders-auth h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.orders-auth p {
+  margin: 0;
+}
+.orders-auth__status {
+  margin-left: auto;
+}
+.orders-auth__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+

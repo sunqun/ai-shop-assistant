@@ -37,18 +37,16 @@ export type CatalogSearchToolOutput = import("@/lib/catalog").ProductSearchPage;
 
 export type AiCartItemInput = { id: string; quantity: number };
 export type AiReconcileCartToolInput = {
-  cartToken: string;
   items: AiCartItemInput[];
   idempotencyKey: string;
 };
-export type AiQuoteCartToolInput = { cartToken: string; cartVersion: number };
+export type AiQuoteCartToolInput = { cartVersion: number };
 export type AiSubmitOrderToolInput = {
-  cartToken: string;
   cartVersion: number;
   quoteId: string;
   idempotencyKey: string;
 };
-export type AiCartToolOutput = import("@/lib/cart-service").ReconcileCartResult;
+export type AiCartToolOutput = import("@/lib/cart-service/cart-service").ReconcileCartResult;
 export type AiQuoteToolOutput = {
   quote: {
     quoteId: string;

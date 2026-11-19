@@ -1,0 +1,122 @@
+/* AI assistant shell and its standalone interaction surface. */
+.assistant-dock {
+  position: fixed;
+  top: 88px;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  width: 340px;
+  max-height: calc(100vh - 112px);
+  overflow: hidden;
+  border: 1px solid var(--primary-border);
+  border-radius: 18px;
+  background: var(--surface-glass);
+  box-shadow: var(--shadow);
+}
+.assistant-dock__header {
+  padding: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, var(--mahogany), var(--mahogany-dark));
+  border-bottom: 1px solid var(--mahogany-dark);
+}
+.assistant-dock__header strong {
+  display: block;
+  color: var(--ink-on-primary);
+  font-size: 16px;
+  font-weight: 800;
+}
+.assistant-dock__title { display: flex; align-items: center; gap: 8px; }
+.assistant-dock__title svg { color: var(--ink-on-primary); }
+.assistant-dock__header span {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-on-primary);
+  font-size: 12px;
+  opacity: 0.82;
+}
+.assistant-dock__body {
+  padding: 16px;
+}
+.assistant-comparison {
+  padding: 12px;
+  border: 1px solid var(--primary-hover);
+  border-radius: 12px;
+  background: var(--surface-cream);
+}
+.assistant-comparison h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.assistant-comparison p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.assistant-dock__results {
+  height: 140px;
+  margin: 12px 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+}
+.assistant-empty {
+  margin: 0;
+  min-height: 160px;
+  padding: 24px 16px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface-cream);
+}
+.assistant-empty--idle { min-height: 160px; border: none; background: transparent; color: var(--line-strong); }
+.assistant-result {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.assistant-result strong {
+  display: block;
+  font-size: 13px;
+}
+.assistant-result span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.assistant-dock__input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.assistant-dock__footer {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.route-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.route-link {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.route-link:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}

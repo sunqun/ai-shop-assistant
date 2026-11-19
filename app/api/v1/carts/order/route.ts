@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/auth-server";
+import { readSession } from "@/lib/auth/auth-server";
 import { OrderServiceError, submitWebOrder } from "@/lib/order-service";
 
 export const runtime = "nodejs";
@@ -13,7 +13,6 @@ export async function POST(request: Request) {
   const session = await readSession();
   if (!session) return errorResponse(401, "UNAUTHENTICATED", "请先登录后再创建订单。");
   let body: {
-    cartToken?: unknown;
     cartVersion?: unknown;
     quoteId?: unknown;
     idempotencyKey?: unknown;
@@ -27,7 +26,6 @@ export async function POST(request: Request) {
     !body ||
     typeof body !== "object" ||
     Array.isArray(body) ||
-    typeof body.cartToken !== "string" ||
     !Number.isSafeInteger(body.cartVersion) ||
     (body.cartVersion as number) < 1 ||
     typeof body.quoteId !== "string" ||
@@ -41,7 +39,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       await submitWebOrder({
         userid: session.userid,
-        cartToken: body.cartToken,
         cartVersion: body.cartVersion as number,
         quoteId: body.quoteId,
         idempotencyKey: body.idempotencyKey,
