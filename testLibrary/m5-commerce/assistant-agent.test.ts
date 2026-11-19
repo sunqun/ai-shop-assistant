@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeIntentSummary, parseProductSearchIntent } from "@/lib/assistant-agent";
+import { makeIntentSummary } from "@/lib/assistant-agent";
+import { parseProductSearchIntent } from "@/lib/assistant-agent/fallback-indent";
 
 afterEach(() => {
   vi.unstubAllEnvs();

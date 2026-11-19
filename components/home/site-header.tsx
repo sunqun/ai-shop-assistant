@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { LanguageSelector } from "@/components/language-provider";
 import { LoginButton } from "@/components/auth";
 import { CartCount } from "@/components/cart-count";
-import { Check, ShoppingCart, Store, Tag } from "lucide-react";
+import { Bot, Check, ShoppingCart, Store, Tag } from "lucide-react";
 import { PromotionRule } from "./type";
 import { getStoreConfigRequest } from "./api";
 
@@ -50,6 +50,14 @@ export function SiteHeader() {
             onClick={() => router.push("/orders")}
           >
             订单
+          </button>
+          <button
+            type="button"
+            className={isActive("/assistant") ? "is-active" : undefined}
+            aria-current={isActive("/assistant") ? "page" : undefined}
+            onClick={() => router.push("/assistant")}
+          >
+            <Bot size={15} style={{ marginRight: 6 }} aria-hidden="true" />AI 助手
           </button>
           <button
             type="button"

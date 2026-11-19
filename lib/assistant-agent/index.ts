@@ -1,19 +1,24 @@
 import type { ProductSearchIntent } from "@/lib/catalog";
+import { fallbackIntent } from "./fallback-indent";
 
+// 意图解析层的全局上限：查询文本长度与单个意图字段的词数上限。
 const MAX_QUERY_LENGTH = 1000;
 const MAX_TERMS = 12;
 
+// 读取并校验必需环境变量，缺失时直接抛出，避免在请求中途才发现配置缺失。
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
 }
 
+// 将任意输入收敛为 [min, max] 区间内的有限数值；非数值或非法值返回 undefined。
 function clampNumber(value: unknown, min: number, max: number): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   return Math.min(max, Math.max(min, value));
 }
 
+// 从模型输出中安全提取字符串数组：只保留字符串项，逐项裁剪长度并限制数量。
 function stringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -23,35 +28,8 @@ function stringList(value: unknown): string[] {
     .slice(0, MAX_TERMS);
 }
 
-function extractFallbackTerms(query: string): string[] {
-  // 当模型没有提取出商品词时，只从常见搜索动作词之后保留短商品短语，避免把整句自然语言直接交给 SQL。
-  const match = query.match(
-    /(?:要买|想买|购买|买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有)([\u4e00-\u9fffA-Za-z0-9][\u4e00-\u9fffA-Za-z0-9\s-]{0,30})/u
-  );
-  const candidateSource = match?.[1] ?? query;
-  const candidate = candidateSource
-    .replace(/[，。！？、；：:,.!?;].*$/u, "")
-    .trim()
-    .replace(
-      /^(我|要|想|买|购买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有|一下|一些|一个|一款|相关的?)/u,
-      ""
-    )
-    .replace(/(吗|呢|呀|啊)$/u, "")
-    .trim();
-  if (candidate.length < 2 || candidate.length > 24) return [];
-  return [candidate];
-}
-
-function fallbackIntent(query: string): ProductSearchIntent {
-  return {
-    keywords: extractFallbackTerms(query),
-    specTerms: [],
-    inStockOnly: false,
-  };
-}
-
+// 模型输出只作为候选条件，先做类型、长度和数值范围校验，再交给数据库查询。
 function normalizeIntent(value: unknown): ProductSearchIntent {
-  // 模型输出只作为候选条件，先做类型、长度和数值范围校验，再交给数据库查询。
   const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const excludeTerms = stringList(source.excludeTerms);
   const excludeBrands = stringList(source.excludeBrands);
@@ -95,12 +73,14 @@ function normalizeIntent(value: unknown): ProductSearchIntent {
   };
 }
 
+// 归一化模型端点：兼容配置里是否已带 /chat/completions 后缀，避免重复拼接。
 function baseUrl(): string {
   return requiredEnv("MODEL_BASE_URL").replace(/\/$/, "").endsWith("/chat/completions")
     ? requiredEnv("MODEL_BASE_URL").replace(/\/$/, "")
     : `${requiredEnv("MODEL_BASE_URL").replace(/\/$/, "")}/chat/completions`;
 }
 
+// 供 LLM function calling 使用的工具声明：把意图解析强制收敛成结构化 JSON 输出。
 const INTENT_TOOL = {
   type: "function",
   function: {
@@ -134,6 +114,7 @@ const INTENT_TOOL = {
   },
 };
 
+// 生成意图解析的 system prompt：约束模型只做理解与结构化，不回答、不推荐、不访问数据。
 function buildIntentSystemPrompt(): string {
   return [
     "你是商品搜索意图解析器。只做理解与结构化，不回答用户问题、不推荐商品、不访问数据库。",
@@ -170,6 +151,7 @@ function buildIntentSystemPrompt(): string {
   ].join("\n");
 }
 
+// 从 OpenAI 兼容响应里逐层取出首个 tool_call 的 arguments 字符串，结构缺失时返回 null。
 function extractToolArguments(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const choices = (data as Record<string, unknown>).choices;
@@ -184,10 +166,13 @@ function extractToolArguments(data: unknown): string | null {
   return typeof args === "string" ? args : null;
 }
 
+// 搜索模式：model 表示由 LLM 解析，fallback 表示模型失败后由正则降级解析。
 export type ProductSearchMode = "model" | "fallback";
 
+// 参与意图解析的历史轮次：只携带查询文本与意图摘要，不携带完整结构化意图。
 export type IntentHistoryTurn = { query: string; intentSummary: string };
 
+// 带模式的意图解析入口：优先走 LLM function calling，失败时用正则降级，并返回实际采用的解析模式。
 export async function parseProductSearchIntentWithMode(
   query: string,
   history: IntentHistoryTurn[] = []
@@ -229,6 +214,7 @@ export async function parseProductSearchIntentWithMode(
     const data: unknown = await response.json();
     const argumentsText = extractToolArguments(data);
     if (argumentsText === null) throw new Error("LLM response did not include a tool call");
+    console.log('---------------LLM response:', argumentsText);
     return {
       intent: normalizeIntent(JSON.parse(argumentsText)),
       searchMode: "model",
@@ -245,11 +231,7 @@ export async function parseProductSearchIntentWithMode(
   }
 }
 
-export async function parseProductSearchIntent(query: string): Promise<ProductSearchIntent> {
-  const { intent } = await parseProductSearchIntentWithMode(query);
-  return intent;
-}
-
+// 判断意图是否为空（无任何商品/品类/品牌/价格/评分/库存/排除条件），用于短路闲聊或超域查询。
 export function isEmptyIntent(intent: ProductSearchIntent): boolean {
   return (
     !intent.keywords.length &&
@@ -266,6 +248,7 @@ export function isEmptyIntent(intent: ProductSearchIntent): boolean {
   );
 }
 
+// 合并上一轮意图与本轮意图：本轮没有新增检索主体时继承上一轮的 keywords/category/brand，并合并其余条件。
 export function mergeIntent(
   previous: ProductSearchIntent | undefined,
   current: ProductSearchIntent
@@ -289,6 +272,7 @@ export function mergeIntent(
   };
 }
 
+// 把结构化意图压缩成一句人类可读的摘要，用于展示与作为下一轮 LLM 的历史上下文。
 export function makeIntentSummary(intent: ProductSearchIntent): string {
   const positive = [
     intent.category,

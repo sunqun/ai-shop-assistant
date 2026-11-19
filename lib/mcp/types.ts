@@ -4,7 +4,7 @@
  * 这里使用进程内传输，保持与未来独立 MCP Server 的 JSON-RPC/HTTP 传输
  * 兼容：调用方只依赖工具名、参数和结构化结果，不依赖数据库实现。
  */
-export type McpToolName = "catalog.search_products" | "commerce.ai_reconcile_cart" | "commerce.ai_quote_cart" | "commerce.ai_submit_order";
+export type McpToolName = "catalog.search_products" | "commerce.ai_reconcile_cart" | "commerce.ai_quote_cart" | "commerce.ai_submit_order" | "commerce.create_payment_link";
 
 export type McpError = {
   code: string;
@@ -24,7 +24,9 @@ export type McpToolCall<TName extends McpToolName = McpToolName> = {
       ? AiReconcileCartToolInput
       : TName extends "commerce.ai_quote_cart"
         ? AiQuoteCartToolInput
-        : AiSubmitOrderToolInput;
+      : TName extends "commerce.ai_submit_order"
+        ? AiSubmitOrderToolInput
+        : CreatePaymentLinkToolInput;
 };
 
 export type CatalogSearchToolInput = {
@@ -46,6 +48,8 @@ export type AiSubmitOrderToolInput = {
   quoteId: string;
   idempotencyKey: string;
 };
+export type CreatePaymentLinkToolInput = { productId: string; quantity: number };
+export type CreatePaymentLinkToolOutput = import("@/lib/payment-link/payment-link-service").PaymentLinkView;
 export type AiCartToolOutput = import("@/lib/cart-service/cart-service").ReconcileCartResult;
 export type AiQuoteToolOutput = {
   quote: {

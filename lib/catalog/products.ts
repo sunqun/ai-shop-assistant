@@ -3,6 +3,7 @@ import { getDbPool } from "@/lib/db";
 import type { CatalogProduct, ProductListFilter, ProductSearchIntent, ProductSearchPage } from "./types";
 import { likeTerm, mapProduct, PRODUCT_GROUP, PRODUCT_SELECT, type ProductRow } from "./shared";
 
+// 商品搜索别名表的一行：alias 为可检索别名，canonical_term 为标准化词。
 type ProductSearchAliasRow = RowDataPacket & {
   alias: string;
   canonical_term: string;
@@ -86,10 +87,12 @@ function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): 
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params };
 }
 
+// 将商品 ID 编码为 base64url 游标，供分页时在服务端还原排序位置。
 function encodeCursor(productId: string): string {
   return Buffer.from(JSON.stringify({ productId }), "utf8").toString("base64url");
 }
 
+// 解析游标；非法或缺失时返回 null，调用方按「从头检索」处理。
 function decodeCursor(cursor: string | undefined): { productId: string } | null {
   if (!cursor) return null;
   try {
@@ -119,6 +122,7 @@ function tokenizeTerms(terms: string[]): string[] {
   return [...new Set(out)];
 }
 
+// 按结构化意图检索商品，返回分页结果；cursor 用于续取下一页，nextCursor 为 null 表示已到底。
 export async function searchCatalogProducts(
   intent: ProductSearchIntent,
   pageSize: number,
@@ -151,6 +155,7 @@ export async function searchCatalogProducts(
   };
 }
 
+// 返回前 100 件商品（空意图、不限条件），供目录页/默认列表使用。
 export async function listCatalogProducts(): Promise<CatalogProduct[]> {
   const page = await searchCatalogProducts(
     { keywords: [], specTerms: [], inStockOnly: false },
@@ -179,6 +184,7 @@ export async function listProducts(filter: ProductListFilter = {}): Promise<Cata
   return rows.map(mapProduct);
 }
 
+// 按商品 ID 查询单个商品，不存在时返回 null。
 export async function getCatalogProduct(productId: string): Promise<CatalogProduct | null> {
   const [rows] = await getDbPool().query<ProductRow[]>(
     `${PRODUCT_SELECT} WHERE p.product_id = ? ${PRODUCT_GROUP} LIMIT 1`,
@@ -187,6 +193,7 @@ export async function getCatalogProduct(productId: string): Promise<CatalogProdu
   return rows.length ? mapProduct(rows[0]) : null;
 }
 
+// 批量查询商品，返回 productId → 商品的 Map；去重后一次查询，避免循环打库。
 export async function getCatalogProducts(productIds: string[]): Promise<Map<string, CatalogProduct>> {
   const ids = [...new Set(productIds)];
   if (!ids.length) return new Map();

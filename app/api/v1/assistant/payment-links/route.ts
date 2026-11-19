@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/auth-server";
-import {
-  createPaymentLink,
-  listPaymentLinks,
-  PaymentLinkError,
-} from "@/lib/payment-link/payment-link-service";
+import { listPaymentLinks, PaymentLinkError } from "@/lib/payment-link/payment-link-service";
+import { callCreatePaymentLinkTool } from "@/lib/mcp/client";
 
 export const runtime = "nodejs";
 
@@ -47,16 +44,15 @@ export async function POST(request: Request) {
   try {
     if (!body || typeof body.productId !== "string" || !Number.isSafeInteger(body.quantity))
       throw new PaymentLinkError("INVALID_PAYMENT_LINK_REQUEST");
-    return NextResponse.json(
-      {
-        link: await createPaymentLink({
-          userid: session.userid,
-          productId: body.productId,
-          quantity: body.quantity as number,
-        }),
-      },
-      { status: 201 }
+    const result = await callCreatePaymentLinkTool(
+      { productId: body.productId, quantity: body.quantity as number },
+      { userid: session.userid }
     );
+    if (!result.ok) {
+      const status = result.error.code === "UNAUTHENTICATED" ? 401 : result.error.retryable ? 503 : 400;
+      return errorResponse(status, result.error.code, result.error.message);
+    }
+    return NextResponse.json({ link: result.data }, { status: 201 });
   } catch (error) {
     return mapError(error);
   }
