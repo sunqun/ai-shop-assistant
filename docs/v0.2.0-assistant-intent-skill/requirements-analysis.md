@@ -15,7 +15,7 @@
 | D-10 | 意图识别从 `response_format: json_object` 改为 OpenAI 兼容的 function calling（`tools` + `tool_choice`），把 `parse_product_search_intent` 定义成带 JSON Schema 的工具；API 层按 schema 强制落参，删除大部分 `extractJson`/`applyQueryFallback` 正则兜底 | 模型自由返回 JSON，再由后端正则与启发式修补 | 意图解析器、Schema、兜底逻辑 |
 | D-11 | 扩展 `ProductSearchIntent`，新增 `excludeTerms`/`excludeBrands`/`excludeCategories` 表达「不要/除了/不是XX」等否定与纠错；目录查询增加 `NOT (...)` 排除子句 | 意图字段无法表达否定，模型可能把否定词当正关键词 | 意图类型、目录 SQL |
 | D-12 | 多轮对话采用**服务端内存 session**（`sessionId -> 最近若干轮历史`），用于指代消解与意图继承；不落库、不跨实例、重启即失效 | 无多轮概念，每次请求都是单轮 | 助手搜索 API、服务端会话存储 |
-| D-13 | 意图分析采用「分层提示词」：先判内容类型（闲聊/搜索），再判意图类型（新增/纠错/继承/补充），最后做实体抽取（含否定、指代消解）；提示词结构参考 `lib/agent/pre_layer.j2` 与 SKILL.md 的「自包含指令集」形态 | 单段扁平提示词，只做字段抽取 | 意图解析器提示词 |
+| D-13 | 意图分析采用「分层提示词」：先判内容类型（闲聊/搜索），再判意图类型（新增/纠错/继承/补充），最后做实体抽取（含否定、指代消解）；提示词结构参考 SKILL.md 的「自包含指令集」形态 | 单段扁平提示词，只做字段抽取 | 意图解析器提示词 |
 | D-14 | 同义与品类归一化继续由目录侧 `product_search_aliases` 表负责（`expandSearchTermGroups`），大模型只输出干净词，不在提示词里硬编码商品别名 | 别名/简称可能被硬编码进提示词 | 目录别名表、意图解析器 |
 
 ## 3. 目标与边界

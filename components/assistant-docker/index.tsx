@@ -27,7 +27,8 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [products, setProducts] = useState<AgentProduct[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [intentSummary, setIntentSummary] = useState("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [history, setHistory] = useState<Array<{ query: string; summary: string }>>([]);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [aiQuantity, setAiQuantity] = useState(1);
   const [addedId, setAddedId] = useState<string | null>(null);
@@ -92,18 +93,24 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     const normalizedQuery = searchQuery.trim();
     if (!normalizedQuery) return;
     setState("loading");
-    const result = await searchProductsRequest(normalizedQuery, cursor);
+    const result = await searchProductsRequest(normalizedQuery, cursor, sessionId ?? undefined);
     if (!result.success) {
       setState("error");
       return;
     }
     const data = result.data;
+    if (data.sessionId) setSessionId(data.sessionId);
     setProducts((current) =>
       cursor ? [...current, ...(data.products ?? [])] : (data.products ?? [])
     );
     setNextCursor(data.nextCursor ?? null);
-    setIntentSummary(data.intentSummary ?? "");
     setSubmittedQuery(normalizedQuery);
+    if (!cursor) {
+      setHistory((current) => [
+        ...current,
+        { query: normalizedQuery, summary: data.intentSummary ?? "" },
+      ]);
+    }
     setState("ready");
   }
 
@@ -235,7 +242,6 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
               setSubmittedQuery(nextQuery);
               setProducts([]);
               setNextCursor(null);
-              setIntentSummary("");
               void searchProducts(nextQuery);
             }}
           >
@@ -254,11 +260,16 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
             </button>
           </form>
 
-          {submittedQuery ? (
-            <div className="assistant-query-meta">
-              <p className="assistant-intent-summary">
-                {intentSummary || `正在理解“${submittedQuery}”`}
-              </p>
+          {history.length ? (
+            <div className="assistant-history" aria-live="polite">
+              {history.map((turn, index) => (
+                <div className="assistant-history__turn" key={index}>
+                  <p className="assistant-history__query">Q：{turn.query}</p>
+                  <p className="assistant-history__summary">
+                    A：{turn.summary || "正在理解..."}
+                  </p>
+                </div>
+              ))}
               <span className="assistant-result-count">
                 {state === "loading" && !products.length
                   ? "正在查询..."

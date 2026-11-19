@@ -31,6 +31,10 @@ export type ProductSearchIntent = {
   minRating?: number;
   inStockOnly: boolean;
   specTerms: string[];
+  // 否定与纠错：出现在名称/品牌/品类/描述/规格中即排除。
+  excludeTerms?: string[];
+  excludeBrands?: string[];
+  excludeCategories?: string[];
 };
 
 export type ProductSearchPage = {

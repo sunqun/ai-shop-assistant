@@ -1,5 +1,6 @@
-import { parseProductSearchIntentWithMode } from "@/lib/assistant-agent";
+import { isEmptyIntent, makeIntentSummary, mergeIntent, parseProductSearchIntentWithMode } from "@/lib/assistant-agent";
 import { invokeAgentTool } from "@/lib/agent/tool-registry";
+import { appendTurn, getOrCreateSession } from "@/lib/agent/session-store";
 import type { CatalogSearchToolOutput } from "@/lib/mcp/types";
 
 export type ProductAgentResult =
@@ -7,6 +8,7 @@ export type ProductAgentResult =
       ok: true;
       intent: Awaited<ReturnType<typeof parseProductSearchIntentWithMode>>["intent"];
       searchMode: "model" | "fallback";
+      sessionId: string;
       data: CatalogSearchToolOutput;
     }
   | { ok: false; code: string; message: string; retryable?: boolean };
@@ -17,11 +19,17 @@ export type ProductAgentResult =
 export async function searchProductsForAgent(
   query: string,
   pageSize: number,
-  cursor?: string
+  cursor?: string,
+  sessionId?: string
 ): Promise<ProductAgentResult> {
+  const session = getOrCreateSession(sessionId);
+  const previousIntent = session.turns.at(-1)?.intent;
   let parsed;
   try {
-    parsed = await parseProductSearchIntentWithMode(query);
+    parsed = await parseProductSearchIntentWithMode(
+      query,
+      session.turns.map((turn) => ({ query: turn.query, intentSummary: turn.intentSummary }))
+    );
   } catch {
     return {
       ok: false,
@@ -31,8 +39,22 @@ export async function searchProductsForAgent(
     };
   }
 
+  // 服务端确定性合并：本轮若无新增商品/品类/品牌词，则继承上一轮检索主体。
+  const intent = mergeIntent(previousIntent, parsed.intent);
+
+  // 空意图（闲聊/超域）不检索商品。
+  if (isEmptyIntent(intent)) {
+    return {
+      ok: true,
+      intent,
+      searchMode: parsed.searchMode,
+      sessionId: session.sessionId,
+      data: { products: [], nextCursor: null },
+    };
+  }
+
   const result = await invokeAgentTool("search_products", {
-    intent: parsed.intent,
+    intent,
     pageSize,
     cursor,
   });
@@ -44,5 +66,16 @@ export async function searchProductsForAgent(
       retryable: result.error.retryable,
     };
   }
-  return { ok: true, intent: parsed.intent, searchMode: parsed.searchMode, data: result.data };
+  appendTurn(session.sessionId, {
+    query,
+    intent,
+    intentSummary: makeIntentSummary(intent),
+  });
+  return {
+    ok: true,
+    intent,
+    searchMode: parsed.searchMode,
+    sessionId: session.sessionId,
+    data: result.data,
+  };
 }

@@ -24,6 +24,7 @@ export type SearchResponse = {
   products?: AgentProduct[];
   nextCursor?: string | null;
   intentSummary?: string;
+  sessionId?: string;
 };
 
 export type DetailResponse = {

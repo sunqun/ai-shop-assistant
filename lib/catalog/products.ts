@@ -33,6 +33,24 @@ async function expandSearchTermGroups(terms: string[]): Promise<string[][]> {
   return uniqueTerms.map((term) => [...(variants.get(term) ?? new Set([term]))]);
 }
 
+function buildExcludeClause(intent: ProductSearchIntent, params: Array<string | number>): string {
+  // 否定匹配范围与正向关键词一致：名称/品牌/品类/描述/规格，命中任一即排除。
+  const exclude = [
+    ...(intent.excludeTerms ?? []),
+    ...(intent.excludeBrands ?? []),
+    ...(intent.excludeCategories ?? []),
+  ];
+  const clauses: string[] = [];
+  for (const term of exclude) {
+    const value = likeTerm(term);
+    clauses.push(
+      "(p.name LIKE ? OR p.brand LIKE ? OR c.name LIKE ? OR p.description LIKE ? OR CAST(p.specs AS CHAR) LIKE ?)"
+    );
+    params.push(value, value, value, value, value);
+  }
+  return clauses.length ? `NOT (${clauses.join(" OR ")})` : "";
+}
+
 function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): { sql: string; params: Array<string | number> } {
   // 所有条件都通过参数绑定传入，避免把模型返回的文本拼进 SQL。
   const clauses: string[] = [];
@@ -45,10 +63,6 @@ function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): 
       params.push(value, value, value, value, value);
     }
     clauses.push(`(${variantClauses.join(" OR ")})`);
-  }
-  if (intent.category) {
-    clauses.push("c.name LIKE ?");
-    params.push(likeTerm(intent.category));
   }
   if (intent.brand) {
     clauses.push("p.brand LIKE ?");
@@ -67,6 +81,8 @@ function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): 
     params.push(intent.minRating);
   }
   if (intent.inStockOnly) clauses.push("COALESCE(inv.on_hand - inv.reserved, 0) > 0");
+  const excludeClause = buildExcludeClause(intent, params);
+  if (excludeClause) clauses.push(excludeClause);
   return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params };
 }
 
@@ -92,12 +108,29 @@ function decodeCursor(cursor: string | undefined): { productId: string } | null 
   return null;
 }
 
+function tokenizeTerms(terms: string[]): string[] {
+  // 把「咖啡 250g」这类带空格的短语拆成独立检索词，避免整体子串匹配失败。
+  const out: string[] = [];
+  for (const term of terms) {
+    for (const token of term.trim().split(/\s+/u)) {
+      if (token) out.push(token);
+    }
+  }
+  return [...new Set(out)];
+}
+
 export async function searchCatalogProducts(
   intent: ProductSearchIntent,
   pageSize: number,
   cursor?: string
 ): Promise<ProductSearchPage> {
-  const termGroups = await expandSearchTermGroups([...intent.keywords, ...intent.specTerms]);
+  // category 降级并入检索词，避免把「咖啡」当成 categories.name 去精确过滤。
+  const searchTerms = tokenizeTerms([
+    ...intent.keywords,
+    ...(intent.category ? [intent.category] : []),
+    ...intent.specTerms,
+  ]);
+  const termGroups = await expandSearchTermGroups(searchTerms);
   const { sql, params } = buildIntentWhere(intent, termGroups);
   const decoded = decodeCursor(cursor);
   // 游标只保存商品 ID；排序分数始终在服务端计算，不能由客户端指定或读取。

@@ -5,7 +5,7 @@ import { searchProductsForAgent } from "@/lib/agent/orchestrator";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type SearchBody = { query?: unknown; cursor?: unknown; pageSize?: unknown };
+type SearchBody = { query?: unknown; cursor?: unknown; pageSize?: unknown; sessionId?: unknown };
 
 export async function POST(request: Request) {
   let body: SearchBody;
@@ -27,9 +27,11 @@ export async function POST(request: Request) {
   const pageSize = Math.min(100, Math.max(1, Number(body.pageSize) || 20));
   const cursor =
     typeof body.cursor === "string" && body.cursor.length < 500 ? body.cursor : undefined;
+  const sessionId =
+    typeof body.sessionId === "string" && body.sessionId.length < 200 ? body.sessionId : undefined;
   try {
     // Agent 通过工具注册表调用商品目录 MCP，路由不再直接连接目录数据库服务。
-    const result = await searchProductsForAgent(body.query, pageSize, cursor);
+    const result = await searchProductsForAgent(body.query, pageSize, cursor, sessionId);
     if (!result.ok) {
       return NextResponse.json(
         { code: result.code, message: result.message },
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
       nextCursor: result.data.nextCursor,
       intentSummary: makeIntentSummary(result.intent),
       searchMode: result.searchMode,
+      sessionId: result.sessionId,
     });
   } catch (error) {
     console.error(
