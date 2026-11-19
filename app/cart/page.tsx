@@ -3,18 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { PlaceholderCard } from "@/components/page-shell";
-import { useAuth } from "@/components/auth-provider";
-import type { CatalogProduct } from "@/lib/catalog";
-import { lineSubtotalMinor } from "@/lib/pricing-domain";
+import { useAuth } from "@/components/auth";
+import type { CartLine, CatalogProduct, CartQuote, UserCartItem } from "./type";
 import {
-  fetchCart,
-  quoteCart,
-  reconcileCart,
-  submitOrder,
-  type CartQuote,
-  type UserCartItem,
-} from "@/lib/cart-client";
-import { showToast } from "@/lib/toast";
+  fetchCartRequest,
+  getProductsRequest,
+  quoteCartRequest,
+  reconcileCartRequest,
+  submitOrderRequest,
+} from "./api";
+import { CartRow } from "./cartRow";
+import { CartTotal } from "./cartTotal";
 
 export default function CartPage() {
   const router = useRouter();
@@ -34,19 +33,12 @@ export default function CartPage() {
   useEffect(() => {
     let active = true;
     setCatalogLoading(true);
-    fetch("/api/v1/products", { cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error("products request failed");
-        return response.json() as Promise<{ products?: CatalogProduct[] }>;
-      })
-      .then((data) => {
-        if (!active) return;
+    getProductsRequest()
+      .then((result) => {
+        if (!active || !result.success) return;
         const map = new Map<string, CatalogProduct>();
-        for (const product of data.products ?? []) map.set(product.id, product);
+        for (const product of result.data.products) map.set(product.id, product);
         setCatalog(map);
-      })
-      .catch(() => {
-        if (active) showToast("商品目录暂时无法加载，请稍后重试。");
       })
       .finally(() => {
         if (active) setCatalogLoading(false);
@@ -71,18 +63,17 @@ export default function CartPage() {
     }
     let active = true;
     setInventoryState("loading");
-    fetchCart()
-      .then((cart) => {
-        if (!active) return;
-        setItems(cart.items);
-        setCartVersion(cart.items.length ? cart.cartVersion : null);
-        setInventoryState("ready");
-      })
-      .catch(() => {
-        if (!active) return;
+    fetchCartRequest().then((result) => {
+      if (!active) return;
+      if (!result.success) {
         setInventoryState("error");
-        showToast("购物车暂时无法加载，请稍后重试。");
-      });
+        return;
+      }
+      const cart = result.data;
+      setItems(cart.items);
+      setCartVersion(cart.items.length ? cart.cartVersion : null);
+      setInventoryState("ready");
+    });
     return () => {
       active = false;
     };
@@ -96,80 +87,85 @@ export default function CartPage() {
     }
     let active = true;
     setQuoteState("loading");
-    quoteCart(cartVersion)
-      .then((result) => {
-        if (!active) return;
-        setQuote(result.quote);
-        setQuoteState("ready");
-      })
-      .catch(() => {
-        if (!active) return;
+    quoteCartRequest(cartVersion).then((result) => {
+      if (!active) return;
+      if (!result.success) {
         setQuote(null);
         setQuoteState("error");
-        showToast("报价暂时无法获取，请稍后重试。");
-      });
+        return;
+      }
+      setQuote(result.data.quote);
+      setQuoteState("ready");
+    });
     return () => {
       active = false;
     };
   }, [cartVersion]);
 
-  const rows = useMemo(
+  const rows = useMemo<CartLine[]>(
     () =>
       items
         .map((item) => ({ item, product: catalog.get(item.productId) }))
-        .filter((row) => row.product),
+        .filter((row): row is CartLine => Boolean(row.product)),
     [items, catalog]
   );
-
-  function formatMinor(value: number) {
-    return `NT$${Math.round(value / 100).toLocaleString()}`;
-  }
 
   async function applyItems(nextItems: UserCartItem[]) {
     setItems(nextItems);
     setInventoryState("loading");
-    try {
-      const result = await reconcileCart(
-        nextItems.map((item) => ({
-          id: item.skuId,
-          quantity: item.requestedQuantity,
-          sku: item.skuId,
-        }))
-      );
-      const bySku = new Map(result.allocations.map((allocation) => [allocation.skuId, allocation]));
-      setItems(
-        nextItems.map((item) => {
-          const allocation = bySku.get(item.skuId);
-          return allocation
-            ? {
-                ...item,
-                requestedQuantity: allocation.quantity,
-                allocatedQuantity: allocation.allocatedQuantity,
-                unavailableQuantity: allocation.unavailableQuantity,
-              }
-            : item;
-        })
-      );
-      setCartVersion(nextItems.length ? result.cartVersion : null);
-      setInventoryState("ready");
-    } catch {
+    const result = await reconcileCartRequest(
+      nextItems.map((item) => ({
+        id: item.skuId,
+        quantity: item.requestedQuantity,
+        sku: item.skuId,
+      }))
+    );
+    if (!result.success) {
       setInventoryState("error");
-      showToast("购物车更新失败，请稍后重试。");
+      return;
     }
+    const bySku = new Map(
+      result.data.allocations.map((allocation) => [allocation.skuId, allocation])
+    );
+    setItems(
+      nextItems.map((item) => {
+        const allocation = bySku.get(item.skuId);
+        return allocation
+          ? {
+              ...item,
+              requestedQuantity: allocation.quantity,
+              allocatedQuantity: allocation.allocatedQuantity,
+              unavailableQuantity: allocation.unavailableQuantity,
+            }
+          : item;
+      })
+    );
+    setCartVersion(nextItems.length ? result.data.cartVersion : null);
+    setInventoryState("ready");
+  }
+
+  function handleQuantityChange(skuId: string, quantity: number) {
+    applyItems(
+      items.map((entry) =>
+        entry.skuId === skuId ? { ...entry, requestedQuantity: quantity } : entry
+      )
+    );
+  }
+
+  function handleRemove(skuId: string) {
+    applyItems(items.filter((entry) => entry.skuId !== skuId));
   }
 
   async function createOrder() {
     if (!quote || cartVersion === null || submitting) return;
     setSubmitting(true);
-    try {
-      await submitOrder(cartVersion, quote.quoteId, idempotencyKey);
-      router.push("/account/orders");
-    } catch {
-      showToast("订单创建失败，请稍后重试。");
+    const result = await submitOrderRequest(cartVersion, quote.quoteId, idempotencyKey);
+    setSubmitting(false);
+    if (!result.success) {
       setIdempotencyKey((current) => current || crypto.randomUUID());
-    } finally {
-      setSubmitting(false);
+      return;
     }
+    router.push("/orders");
   }
 
   if (catalogLoading || authLoading)
@@ -206,7 +202,7 @@ export default function CartPage() {
     <div className="cart-page">
       <header className="cart-heading">
         <div>
-          <p className="muted">{rows.length} 件商品</p>
+         {rows.length} 件商品
         </div>
         <button className="button button--ghost" type="button" onClick={() => router.push("/")}>
           继续购物
@@ -216,117 +212,26 @@ export default function CartPage() {
       <div className="cart-layout">
         <section className="cart-sheet" aria-label="购物车商品">
           <div className="cart-sheet__list">
-            {rows.map(({ item, product }) => {
-              const subtotal =
-                item.allocatedQuantity > 0
-                  ? formatMinor(lineSubtotalMinor(product!.price, item.allocatedQuantity))
-                  : "库存确认后计算";
-              return (
-                <article className="cart-row" key={item.skuId}>
-                  <div
-                    className={`cart-row__visual cart-row__visual--${product!.tone || "all"}`}
-                    aria-hidden="true"
-                  >
-                    {(product!.brand || product!.name).slice(0, 1)}
-                  </div>
-                  <div className="cart-row__content">
-                    <div className="cart-row__title">{product!.name}</div>
-                    <div className="cart-row__brand">
-                      {product!.brand} · {product!.category}
-                    </div>
-                    <span className="cart-row__unit">单价 NT${product!.price.toLocaleString()}</span>
-                    {item.unavailableQuantity > 0 ? (
-                      <span className="stock stock--out">
-                        缺货 {item.unavailableQuantity} 件，已锁定 {item.allocatedQuantity} 件
-                      </span>
-                    ) : item.allocatedQuantity > 0 ? (
-                      <span className="stock stock--in">已锁定 {item.allocatedQuantity} 件</span>
-                    ) : null}
-                  </div>
-                  <label className="cart-quantity">
-                    <span className="sr-only">{product!.name} 数量</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max={product!.stock || 1}
-                      value={item.requestedQuantity}
-                      onChange={(event) => {
-                        const quantity = Math.max(
-                          1,
-                          Math.min(product!.stock || 1, Number(event.target.value) || 1)
-                        );
-                        applyItems(
-                          items.map((entry) =>
-                            entry.skuId === item.skuId ? { ...entry, requestedQuantity: quantity } : entry
-                          )
-                        );
-                      }}
-                    />
-                  </label>
-                  <strong className="cart-row__subtotal">{subtotal}</strong>
-                  <button
-                    className="cart-remove"
-                    type="button"
-                    onClick={() => applyItems(items.filter((entry) => entry.skuId !== item.skuId))}
-                  >
-                    移除
-                  </button>
-                </article>
-              );
-            })}
+            {rows.map((line) => (
+              <CartRow
+                key={line.item.skuId}
+                line={line}
+                onQuantityChange={handleQuantityChange}
+                onRemove={handleRemove}
+              />
+            ))}
           </div>
         </section>
 
-        <aside className="cart-total">
-          <div className="cart-total__head">
-            <span>预计应付</span>
-            {quoteState === "ready" && quote ? (
-              <strong className="cart-total__amount">{formatMinor(quote.totalDueMinor)}</strong>
-            ) : (
-              <span className="cart-total__amount cart-total__amount--pending">
-                {inventoryState === "ready" ? "计算中" : "待确认"}
-              </span>
-            )}
-          </div>
-
-          {quoteState === "ready" && quote ? (
-            <dl className="cart-total__lines">
-              <div className="cart-total__line">
-                <dt>商品小计</dt>
-                <dd>{formatMinor(quote.subtotalMinor)}</dd>
-              </div>
-              <div className="cart-total__line">
-                <dt>折扣减免</dt>
-                <dd>
-                  {quote.discountMinor ? `-${formatMinor(quote.discountMinor)}` : formatMinor(0)}
-                </dd>
-              </div>
-              <div className="cart-total__line">
-                <dt>运费</dt>
-                <dd>{quote.shippingMinor ? formatMinor(quote.shippingMinor) : "免运费"}</dd>
-              </div>
-            </dl>
-          ) : null}
-
-          <div className="cart-total__foot">
-            {user && !user.isAuthorized ? (
-              <p className="cart-total__notice">尚未完成下单授权，请前往「订单」页完成授权。</p>
-            ) : null}
-            <button
-              className="cart-total__pay"
-              type="button"
-              disabled={
-                quoteState !== "ready" ||
-                !user?.isAuthorized ||
-                submitting ||
-                items.length === 0
-              }
-              onClick={createOrder}
-            >
-              {submitting ? "正在创建订单…" : "付款"}
-            </button>
-          </div>
-        </aside>
+        <CartTotal
+          quote={quote}
+          quoteState={quoteState}
+          inventoryState={inventoryState}
+          isAuthorized={user.isAuthorized}
+          submitting={submitting}
+          itemCount={items.length}
+          onPay={createOrder}
+        />
       </div>
     </div>
   );
