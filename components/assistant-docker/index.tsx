@@ -12,13 +12,12 @@ import {
   type PaymentLinkView,
 } from "@/lib/payment-link/payment-link-client";
 import { showToast } from "@/lib/toast";
-import { ArrowRight, Bot, Sparkles, X } from "lucide-react";
+import { ArrowRight, Bot, Sparkles } from "lucide-react";
 import { getProductDetailRequest, searchProductsRequest } from "./api";
-import type { AgentProduct, AgentReview } from "./types";
-
-function formatMinor(value: number) {
-  return `NT$${Math.round(value / 100).toLocaleString()}`;
-}
+import { PaymentLinks } from "./payment-link";
+import { ProductDetailDialog } from "./product-detail";
+import { OrderResultDialog } from "./order-result";
+import type { AgentProduct, AgentReview, OrderReceipt } from "./types";
 
 export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
@@ -34,16 +33,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
   const [addedId, setAddedId] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [payingProductId, setPayingProductId] = useState<string | null>(null);
-  const [orderReceipt, setOrderReceipt] = useState<{
-    orderGroupId: string;
-    productName: string;
-    quantity: number;
-    unitPrice: number;
-    subtotalMinor: number;
-    discountMinor: number;
-    shippingMinor: number;
-    totalMinor: number;
-  } | null>(null);
+  const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | null>(null);
   const [detailProduct, setDetailProduct] = useState<AgentProduct | null>(null);
   const [detailReviews, setDetailReviews] = useState<AgentReview[]>([]);
   const [detailState, setDetailState] = useState<"loading" | "ready" | "error">("loading");
@@ -67,10 +57,6 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
       cancelled = true;
     };
   }, [user]);
-
-  function paymentLinkUrl(link: PaymentLinkView) {
-    return `${window.location.origin}/handoff?token=${encodeURIComponent(link.urlToken)}`;
-  }
 
   async function createPaymentLinkForProduct(product: AgentProduct) {
     if (!product.stock) {
@@ -99,15 +85,6 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
       }
     } finally {
       setDeletingPaymentLinkId(null);
-    }
-  }
-
-  async function copyPaymentLink(link: PaymentLinkView) {
-    try {
-      await navigator.clipboard.writeText(paymentLinkUrl(link));
-      showToast("支付短链已复制。", "success");
-    } catch {
-      showToast("复制失败，请手动复制链接。", "info");
     }
   }
 
@@ -232,37 +209,11 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
   return (
     <div className={`assistant-column${paymentLinks.length ? " assistant-column--with-links" : ""}`}>
       {paymentLinks.length ? (
-        <section className="assistant-payment-links assistant-payment-links--above" aria-label="支付短链">
-          <div className="assistant-payment-links__header">
-            <strong>支付短链</strong>
-          </div>
-          <div className="assistant-payment-links__list">
-            {paymentLinks.map((link) => (
-              <article className="assistant-payment-link" key={link.linkId}>
-                <div className="assistant-payment-link__summary">
-                  <strong>{link.product.name}</strong>
-                  <span>数量 {link.quantity} · {link.username}</span>
-                </div>
-                <div className="assistant-payment-link__row">
-                  <div className="assistant-payment-link__url" title={paymentLinkUrl(link)}>
-                    {paymentLinkUrl(link)}
-                  </div>
-                  <div className="assistant-payment-link__actions">
-                    <button className="assistant-text-link" type="button" onClick={() => void copyPaymentLink(link)}>
-                      复制
-                    </button>
-                    <button className="assistant-text-link" type="button" onClick={() => window.open(paymentLinkUrl(link), "_blank", "noopener,noreferrer")}>
-                      打开
-                    </button>
-                    <button className="assistant-text-link assistant-text-link--danger" type="button" disabled={deletingPaymentLinkId === link.linkId} onClick={() => void removePaymentLink(link)}>
-                      {deletingPaymentLinkId === link.linkId ? "删除中..." : "删除"}
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+        <PaymentLinks
+          paymentLinks={paymentLinks}
+          deletingPaymentLinkId={deletingPaymentLinkId}
+          onRemove={removePaymentLink}
+        />
       ) : null}
       <aside
         className={`assistant-dock${embedded ? " assistant-dock--embedded" : ""}`}
@@ -438,148 +389,23 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
       </aside>
 
       {detailProduct ? (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="商品详情"
-          onClick={() => setDetailProduct(null)}
-        >
-          <div className="assistant-detail-dialog" onClick={(event) => event.stopPropagation()}>
-            <div className="auth-dialog__header">
-              <h2>{detailProduct.name}</h2>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setDetailProduct(null)}
-                aria-label="关闭详情"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="assistant-detail__body">
-              {detailState === "loading" ? (
-                <p className="assistant-empty">正在加载商品详情...</p>
-              ) : null}
-              {detailState === "error" ? (
-                <p className="assistant-empty">详情暂时无法加载，请稍后重试。</p>
-              ) : null}
-              {detailState === "ready" ? (
-                <>
-                  <div>
-                    <p className="assistant-detail__price">
-                      NT${detailProduct.price.toLocaleString()}
-                    </p>
-                    <p className="assistant-detail__meta">
-                      {detailProduct.brand || "品牌待补充"} · {detailProduct.category}
-                      {detailProduct.rating ? ` · ★ ${detailProduct.rating}` : ""} ·{" "}
-                      {detailProduct.reviewCount} 条评论
-                    </p>
-                  </div>
-                  <p className="assistant-detail__desc">{detailProduct.description}</p>
-                  <div className="assistant-detail__specs">
-                    {Object.entries(detailProduct.specs ?? {}).map(([key, value]) => (
-                      <span className="tag" key={key}>
-                        {key}: {value}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="assistant-detail__reviews">
-                    <strong>用户评价（{detailReviews.length}）</strong>
-                    {detailReviews.length ? (
-                      detailReviews.map((review) => (
-                        <article className="assistant-review" key={review.id}>
-                          <div>
-                            <strong>{review.reviewer}</strong>
-                            <span>
-                              ★ {review.rating} · {review.reviewedAt}
-                            </span>
-                          </div>
-                          <p>{review.content}</p>
-                        </article>
-                      ))
-                    ) : (
-                      <p className="assistant-empty">暂无公开评论。</p>
-                    )}
-                  </div>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
+        <ProductDetailDialog
+          product={detailProduct}
+          reviews={detailReviews}
+          state={detailState}
+          onClose={() => setDetailProduct(null)}
+        />
       ) : null}
 
       {orderReceipt ? (
-        <div
-          className="modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="订单回执"
-          onClick={() => setOrderReceipt(null)}
-        >
-          <div className="auth-dialog" onClick={(event) => event.stopPropagation()}>
-            <div className="auth-dialog__header">
-              <h2>下单成功</h2>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setOrderReceipt(null)}
-                aria-label="关闭回执"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="assistant-detail__body">
-              <div className="list-item">
-                <div>
-                  <p className="list-item__title">{orderReceipt.productName}</p>
-                  <p className="list-item__meta">
-                    数量：{orderReceipt.quantity} · 单价：NT${orderReceipt.unitPrice.toLocaleString()}
-                  </p>
-                </div>
-                <strong>
-                  {formatMinor(orderReceipt.subtotalMinor)}
-                </strong>
-              </div>
-              <div className="cart-summary__line">
-                <span>商品小计</span>
-                <strong>{formatMinor(orderReceipt.subtotalMinor)}</strong>
-              </div>
-              <div className="cart-summary__line">
-                <span>优惠</span>
-                <strong>{formatMinor(orderReceipt.discountMinor)}</strong>
-              </div>
-              <div className="cart-summary__line">
-                <span>运费</span>
-                <strong>{formatMinor(orderReceipt.shippingMinor)}</strong>
-              </div>
-              <div className="cart-summary__total">
-                <span>订单金额</span>
-                <strong>{formatMinor(orderReceipt.totalMinor)}</strong>
-              </div>
-              <p className="assistant-detail__meta">订单编号：{orderReceipt.orderGroupId}</p>
-              <div className="assistant-result__actions">
-                <button
-                  className="button button--soft"
-                  type="button"
-                  onClick={() => {
-                    setOrderReceipt(null);
-                    router.push("/orders");
-                  }}
-                >
-                  查看订单
-                </button>
-                <button
-                  className="button button--ghost"
-                  type="button"
-                  onClick={() => setOrderReceipt(null)}
-                >
-                  关闭
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <OrderResultDialog
+          receipt={orderReceipt}
+          onClose={() => setOrderReceipt(null)}
+          onViewOrders={() => {
+            setOrderReceipt(null);
+            router.push("/orders");
+          }}
+        />
       ) : null}
     </div>
   );

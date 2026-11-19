@@ -25,12 +25,17 @@ function stringList(value: unknown): string[] {
 
 function extractFallbackTerms(query: string): string[] {
   // 当模型没有提取出商品词时，只从常见搜索动作词之后保留短商品短语，避免把整句自然语言直接交给 SQL。
-  const match = query.match(/(?:要买|想买|购买|买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有)([\u4e00-\u9fffA-Za-z0-9][\u4e00-\u9fffA-Za-z0-9\s-]{0,30})/u);
+  const match = query.match(
+    /(?:要买|想买|购买|买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有)([\u4e00-\u9fffA-Za-z0-9][\u4e00-\u9fffA-Za-z0-9\s-]{0,30})/u
+  );
   const candidateSource = match?.[1] ?? query;
   const candidate = candidateSource
     .replace(/[，。！？、；：:,.!?;].*$/u, "")
     .trim()
-    .replace(/^(我|要|想|买|购买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有|一下|一些|一个|一款|相关的?)/u, "")
+    .replace(
+      /^(我|要|想|买|购买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有|一下|一些|一个|一款|相关的?)/u,
+      ""
+    )
     .replace(/(吗|呢|呀|啊)$/u, "")
     .trim();
   if (candidate.length < 2 || candidate.length > 24) return [];
@@ -43,14 +48,21 @@ function normalizeSearchTerms(terms: string[]): string[] {
 }
 
 function applyQueryFallback(intent: ProductSearchIntent, query: string): ProductSearchIntent {
-  const fallbackTerms = extractFallbackTerms(query).filter((term) => !intent.keywords.includes(term));
+  const fallbackTerms = extractFallbackTerms(query).filter(
+    (term) => !intent.keywords.includes(term)
+  );
   if (!fallbackTerms.length) return intent;
 
   // 模型偶尔会把“有没有”“我要买”等问法一起放进关键词；这类词会导致真实商品字段无法命中。
-  const hasWrappedKeyword = intent.keywords.some((term) =>
-    /^(我|要|想|买|购买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有)/u.test(term) || term.includes(query)
+  const hasWrappedKeyword = intent.keywords.some(
+    (term) =>
+      /^(我|要|想|买|购买|寻找|找|需要|推荐|查找|搜索|有没有|有无|是否有|有)/u.test(term) ||
+      term.includes(query)
   );
-  if (hasWrappedKeyword || (!intent.keywords.length && !intent.specTerms.length && !intent.category && !intent.brand)) {
+  if (
+    hasWrappedKeyword ||
+    (!intent.keywords.length && !intent.specTerms.length && !intent.category && !intent.brand)
+  ) {
     return { ...intent, keywords: normalizeSearchTerms(fallbackTerms) };
   }
   return intent;
@@ -66,20 +78,28 @@ function fallbackIntent(query: string): ProductSearchIntent {
 
 function normalizeIntent(value: unknown): ProductSearchIntent {
   // 模型输出只作为候选条件，先做类型、长度和数值范围校验，再交给数据库查询。
-  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   const keywords = stringList(source.keywords);
-  const category = typeof source.category === "string" ? source.category.trim().slice(0, 80) || undefined : undefined;
+  const category =
+    typeof source.category === "string"
+      ? source.category.trim().slice(0, 80) || undefined
+      : undefined;
   const minPrice = clampNumber(source.minPrice, 0, 10_000_000);
   const maxPrice = clampNumber(source.maxPrice, 0, 10_000_000);
-  const normalizedMin = minPrice !== undefined && maxPrice !== undefined ? Math.min(minPrice, maxPrice) : minPrice;
-  const normalizedMax = minPrice !== undefined && maxPrice !== undefined ? Math.max(minPrice, maxPrice) : maxPrice;
+  const normalizedMin =
+    minPrice !== undefined && maxPrice !== undefined ? Math.min(minPrice, maxPrice) : minPrice;
+  const normalizedMax =
+    minPrice !== undefined && maxPrice !== undefined ? Math.max(minPrice, maxPrice) : maxPrice;
   return {
     keywords,
     // 同一词被模型重复标成品类和商品词时，只保留商品词；否则数据库会再要求分类名也匹配该词。
-    category: category && keywords.some((keyword) => keyword.toLocaleLowerCase() === category.toLocaleLowerCase())
-      ? undefined
-      : category,
-    brand: typeof source.brand === "string" ? source.brand.trim().slice(0, 80) || undefined : undefined,
+    category:
+      category &&
+      keywords.some((keyword) => keyword.toLocaleLowerCase() === category.toLocaleLowerCase())
+        ? undefined
+        : category,
+    brand:
+      typeof source.brand === "string" ? source.brand.trim().slice(0, 80) || undefined : undefined,
     minPrice: normalizedMin,
     maxPrice: normalizedMax,
     minRating: clampNumber(source.minRating, 0, 5),
@@ -90,7 +110,10 @@ function normalizeIntent(value: unknown): ProductSearchIntent {
 
 function extractJson(content: string): unknown {
   // 兼容少数兼容接口仍会包裹 markdown 代码块的情况，但不放宽后续字段校验。
-  const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const trimmed = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
   try {
     return JSON.parse(trimmed);
   } catch {
@@ -112,6 +135,7 @@ export type ProductSearchMode = "model" | "fallback";
 export async function parseProductSearchIntentWithMode(
   query: string
 ): Promise<{ intent: ProductSearchIntent; searchMode: ProductSearchMode }> {
+  console.log("parseProductSearchIntentWithMode", query);
   const normalizedQuery = query.trim().slice(0, MAX_QUERY_LENGTH);
   if (!normalizedQuery) {
     return {
@@ -146,9 +170,16 @@ export async function parseProductSearchIntentWithMode(
     if (!response.ok) throw new Error(`LLM request failed with status ${response.status}`);
     const data: unknown = await response.json();
     const content =
-      data && typeof data === "object" && "choices" in data && Array.isArray(data.choices) && data.choices[0] &&
-      typeof data.choices[0] === "object" && "message" in data.choices[0] && data.choices[0].message &&
-      typeof data.choices[0].message === "object" && "content" in data.choices[0].message
+      data &&
+      typeof data === "object" &&
+      "choices" in data &&
+      Array.isArray(data.choices) &&
+      data.choices[0] &&
+      typeof data.choices[0] === "object" &&
+      "message" in data.choices[0] &&
+      data.choices[0].message &&
+      typeof data.choices[0].message === "object" &&
+      "content" in data.choices[0].message
         ? data.choices[0].message.content
         : null;
     if (typeof content !== "string") throw new Error("LLM response did not include intent content");

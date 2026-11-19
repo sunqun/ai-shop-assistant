@@ -30,3 +30,14 @@ export type DetailResponse = {
   product: AgentProduct;
   reviews: AgentReview[];
 };
+
+export type OrderReceipt = {
+  orderGroupId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotalMinor: number;
+  discountMinor: number;
+  shippingMinor: number;
+  totalMinor: number;
+};

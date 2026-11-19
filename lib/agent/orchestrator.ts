@@ -14,15 +14,28 @@ export type ProductAgentResult =
 /**
  * M4 商品 Agent 编排层：LLM 只解析意图，工具注册表负责调用目录 MCP。
  */
-export async function searchProductsForAgent(query: string, pageSize: number, cursor?: string): Promise<ProductAgentResult> {
+export async function searchProductsForAgent(
+  query: string,
+  pageSize: number,
+  cursor?: string
+): Promise<ProductAgentResult> {
   let parsed;
   try {
     parsed = await parseProductSearchIntentWithMode(query);
   } catch {
-    return { ok: false, code: "INTENT_PARSE_UNAVAILABLE", message: "助手暂时无法理解这次查询，请稍后重试。", retryable: true };
+    return {
+      ok: false,
+      code: "INTENT_PARSE_UNAVAILABLE",
+      message: "助手暂时无法理解这次查询，请稍后重试。",
+      retryable: true,
+    };
   }
 
-  const result = await invokeAgentTool("search_products", { intent: parsed.intent, pageSize, cursor });
+  const result = await invokeAgentTool("search_products", {
+    intent: parsed.intent,
+    pageSize,
+    cursor,
+  });
   if (!result.ok) {
     return {
       ok: false,
@@ -33,4 +46,3 @@ export async function searchProductsForAgent(query: string, pageSize: number, cu
   }
   return { ok: true, intent: parsed.intent, searchMode: parsed.searchMode, data: result.data };
 }
-
