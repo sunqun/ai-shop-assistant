@@ -6,7 +6,15 @@ import { z } from "zod";
 import { searchProductsForAgent } from "@/lib/agent/search-products-agent";
 import { invokeAgentTool } from "@/lib/agent/tool-registry";
 import type { CatalogProduct } from "@/lib/catalog";
-import type { QuoteToolOutput } from "@/lib/mcp/types";
+import type { OrderToolOutput, QuoteToolOutput } from "@/lib/mcp/types";
+import type { ShoppingTaskData } from "./shopping-task-types";
+
+export type ShoppingPreparationControl = {
+  signal: AbortSignal;
+  beforeTool: (phase?: "searching" | "selecting" | "reconciling" | "quoting") => Promise<void>;
+  onProgress: (data: ShoppingTaskData) => Promise<void>;
+  cartIdempotencyKey: string;
+};
 
 type ShoppingFinal = {
   status: "ready_for_confirmation" | "ordered" | "needs_login" | "needs_authorization" | "failed";
@@ -25,11 +33,15 @@ export async function runShoppingReAct(input: {
   userid: string;
   sessionId?: string;
   confirmOrder: boolean;
+  control?: ShoppingPreparationControl;
 }): Promise<ShoppingFinal> {
   let candidates: CatalogProduct[] = [];
   let selected: CatalogProduct | undefined;
   let cartVersion: number | undefined;
   let quote: QuoteToolOutput | undefined;
+  let order: OrderToolOutput | undefined;
+  let cartResult: unknown;
+  const control = input.control;
   const llm = createLLMFromEnv();
   // This endpoint is a single HTTP response rather than a streamed UI session,
   // so expose retry progress in server logs while the shared client retries safely.
@@ -50,9 +62,13 @@ export async function runShoppingReAct(input: {
       retryOnExecutionError: true,
       inputSchema: z.object({ query: z.string().trim().min(1).max(1000) }).strict(),
       execute: async ({ query }: { query: string }) => {
+        await control?.beforeTool("searching");
+        if (control && cartVersion)
+          throw new Error("The cart is already prepared; finish with the current quote");
         const result = await searchProductsForAgent(query, 100, undefined, input.sessionId);
         if (!result.ok) throw new Error(result.message);
         candidates = result.data.products.filter((product) => product.stock > 0);
+        await control?.onProgress({ product: selectTopInStockProduct(candidates) });
         return {
           products: candidates,
           nextCursor: result.data.nextCursor,
@@ -65,8 +81,11 @@ export async function runShoppingReAct(input: {
         "Select the first in-stock product from the latest catalog search results, preserving the order returned by the catalog.",
       inputSchema: z.object({}).strict(),
       execute: async () => {
+        await control?.beforeTool("selecting");
+        if (control && cartVersion) return { product: selected };
         selected = selectTopInStockProduct(candidates);
         if (!selected) throw new Error("No in-stock product matched the request");
+        await control?.onProgress({ product: selected });
         return { product: selected };
       },
     },
@@ -74,17 +93,20 @@ export async function runShoppingReAct(input: {
       description: "Add the selected product, quantity one, to the AI cart.",
       inputSchema: z.object({ quantity: z.number().int().min(1).max(10) }).strict(),
       execute: async ({ quantity }: { quantity: number }) => {
+        await control?.beforeTool("reconciling");
+        if (control && cartVersion) return cartResult;
         if (!selected) throw new Error("Select a product before adding to cart");
         const result = await invokeAgentTool(
           "reconcile_cart",
           {
-            items: [{ id: selected.id, quantity }],
-            idempotencyKey: randomUUID(),
+            items: [{ id: selected.id, quantity: control ? 1 : quantity }],
+            idempotencyKey: control?.cartIdempotencyKey ?? randomUUID(),
           },
           { userid: input.userid }
         );
         if (!result.ok) throw new Error(result.error.message);
         cartVersion = result.data.cartVersion;
+        cartResult = result.data;
         return result.data;
       },
     },
@@ -92,6 +114,8 @@ export async function runShoppingReAct(input: {
       description: "Revalidate stock and calculate the current total before ordering.",
       inputSchema: z.object({}).strict(),
       execute: async () => {
+        await control?.beforeTool("quoting");
+        if (control && quote) return quote;
         if (!cartVersion) throw new Error("Add a product to the cart before quoting");
         const result = await invokeAgentTool(
           "quote_cart",
@@ -100,6 +124,7 @@ export async function runShoppingReAct(input: {
         );
         if (!result.ok) throw new Error(result.error.message);
         quote = result.data;
+        await control?.onProgress({ quote });
         return result.data;
       },
     },
@@ -107,6 +132,9 @@ export async function runShoppingReAct(input: {
       description: "Submit the quoted AI order only when the user explicitly confirmed the order.",
       inputSchema: z.object({}).strict(),
       execute: async () => {
+        await control?.beforeTool();
+        // 任务模式只准备报价，下单必须经过服务端任务的原子状态屏障。
+        if (control) return { status: "confirmation_required", quote };
         if (!input.confirmOrder) return { status: "confirmation_required", quote };
         if (!cartVersion || !quote || typeof quote !== "object" || !("quote" in quote))
           throw new Error("Quote the cart before ordering");
@@ -117,16 +145,34 @@ export async function runShoppingReAct(input: {
           { userid: input.userid }
         );
         if (!result.ok) throw new Error(result.error.message);
+        order = result.data;
         return result.data;
       },
     },
     final_answer: {
       description: "Finish with a concise user-facing result after the workflow is complete.",
-      inputSchema: z.object({
-        status: z.enum(["ready_for_confirmation", "ordered", "needs_login", "needs_authorization", "failed"]),
-        message: z.string().trim().min(1).max(1000),
-      }).strict(),
-      execute: async (result: ShoppingFinal) => ({ ...result, product: selected, quote, order: result.order }),
+      inputSchema: z
+        .object({
+          status: z.enum([
+            "ready_for_confirmation",
+            "ordered",
+            "needs_login",
+            "needs_authorization",
+            "failed",
+          ]),
+          message: z.string().trim().min(1).max(1000),
+        })
+        .strict(),
+      execute: async (result: ShoppingFinal) => {
+        await control?.beforeTool();
+        return {
+          ...result,
+          status: order ? "ordered" : quote ? "ready_for_confirmation" : "failed",
+          product: selected,
+          quote,
+          order,
+        };
+      },
     },
   };
 
@@ -142,11 +188,12 @@ export async function runShoppingReAct(input: {
     },
     { role: "user", content: input.query },
   ];
-  
+
   // LLM.client is the retry-aware facade, so every ReAct model step gets the
   // same transport retry handling as the one-shot intent parser.
   const result = await runReAct<ShoppingFinal>(llm.client, messages, tools, "final_answer", {
     maxSteps: 8,
+    abortSignal: control?.signal,
   });
   return result.result;
 }

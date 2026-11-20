@@ -1,57 +1,105 @@
 "use client";
 
-import { ArrowUp, Check, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowUp, Check, LoaderCircle, X } from "lucide-react";
+import { SHOPPING_PHASE_LABELS } from "@/lib/agent/shopping-task-types";
 import type { AssistantController } from "./use-assistant";
 
-type AssistantComposerProps = Pick<
-  AssistantController,
-  | "query"
-  | "setQuery"
-  | "busy"
-  | "pendingConfirmation"
-  | "inputRef"
-  | "send"
-  | "confirmOrder"
-  | "cancelToPaymentLink"
-  | "submit"
->;
+export function AssistantComposer({ controller }: { controller: AssistantController }) {
+  const {
+    query,
+    setQuery,
+    busy,
+    inputRef,
+    send,
+    submit,
+    task,
+    paused,
+    submitting,
+    canceling,
+    connectionLost,
+    confirmOrder,
+    cancelToPaymentLink,
+    resume,
+    refreshTask,
+    retryPaymentLink,
+    recoverOrder,
+  } = controller;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (task?.phase !== "ready_to_order" || !task.commitAfter) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [task?.phase, task?.commitAfter]);
+  const seconds = task?.commitAfter
+    ? Math.max(0, Math.ceil((Date.parse(task.commitAfter) - now) / 1000))
+    : 0;
+  const canCancel = task?.canCancel && !submitting;
+  const showActions = task && (!task.terminal || task.phase === "canceled_link_failed");
 
-export function AssistantComposer({
-  query,
-  setQuery,
-  busy,
-  pendingConfirmation,
-  inputRef,
-  send,
-  confirmOrder,
-  cancelToPaymentLink,
-  submit,
-}: AssistantComposerProps) {
   return (
     <form className="agent-test__composer" onSubmit={submit}>
-      {pendingConfirmation ? (
-        <div className="agent-test__confirm">
-          <span>选择直接下单或改用支付短链</span>
+      {showActions ? (
+        <div className="agent-test__confirm" aria-live="polite">
+          <span>
+            {submitting || task.phase === "committing"
+              ? "正在创建订单，已停止接受取消…"
+              : paused
+                ? "已恢复任务，点击继续执行后推进流程。"
+                : task.phase === "ready_to_order"
+                  ? `约 ${seconds} 秒后自动创建订单`
+                  : SHOPPING_PHASE_LABELS[task.phase]}
+          </span>
           <div className="agent-test__confirm-actions">
-            <button
-              className="agent-test__cancel"
-              type="button"
-              disabled={busy}
-              onClick={() => void cancelToPaymentLink()}
-            >
-              <X size={15} />
-              取消
-            </button>
-            <button type="button" disabled={busy} onClick={() => void confirmOrder()}>
-              <Check size={15} />
-              确认下单
-            </button>
+            {canCancel ? (
+              <button
+                className="agent-test__cancel"
+                type="button"
+                disabled={canceling}
+                onClick={() => void cancelToPaymentLink()}
+              >
+                {canceling ? <LoaderCircle size={15} /> : <X size={15} />}
+                {canceling ? "正在取消" : "取消并生成短链"}
+              </button>
+            ) : null}
+            {task.canConfirm && !submitting ? (
+              <button
+                type="button"
+                disabled={canceling || connectionLost}
+                onClick={() => void confirmOrder()}
+              >
+                <Check size={15} />
+                确认下单
+              </button>
+            ) : null}
+            {paused && !submitting ? (
+              <button type="button" disabled={connectionLost || canceling} onClick={resume}>
+                继续执行
+              </button>
+            ) : null}
+            {task.phase === "canceled_link_failed" ? (
+              <button type="button" onClick={() => void retryPaymentLink()}>
+                重试生成短链
+              </button>
+            ) : null}
+            {task.canRecover ? (
+              <button type="button" onClick={() => void recoverOrder()}>
+                核对订单结果
+              </button>
+            ) : null}
           </div>
         </div>
+      ) : null}
+      {connectionLost ? (
+        <button className="agent-test__reconnect" type="button" onClick={() => void refreshTask()}>
+          重新连接并查询当前任务
+        </button>
       ) : null}
       <textarea
         ref={inputRef}
         value={query}
+        maxLength={1000}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {

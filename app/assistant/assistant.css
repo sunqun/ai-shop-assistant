@@ -1,28 +1,45 @@
 .site-main:has(.agent-test) {
-  width: min(1160px, calc(100% - 48px));
-  padding-top: 30px;
+  width: 100%;
+  height: calc(100dvh - 69px);
+  margin: 0;
+  padding: 16px 24px 20px;
+  overflow: hidden;
+}
+body:has(.agent-test) {
+  height: 100dvh;
+  overflow: hidden;
 }
 .agent-test {
   display: grid;
-  gap: 18px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  height: 100%;
   min-width: 0;
+  min-height: 0;
 }
 .agent-test__heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.agent-test__identity {
+  margin: 0;
 }
 .agent-test__heading h1 {
   margin: 0;
-  font-size: 30px;
+  font-size: 24px;
   line-height: 1.2;
+  white-space: nowrap;
 }
 .agent-test__heading .eyebrow {
-  margin-bottom: 5px;
+  margin: 0;
   color: var(--accent-deep);
   font-size: 11px;
   font-weight: 800;
+  white-space: nowrap;
 }
 .agent-test__heading > div:first-child > p:last-child {
   margin: 5px 0 0;
@@ -34,19 +51,86 @@
   align-items: center;
   gap: 16px;
 }
+.agent-test__icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.agent-test__mode-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 10px 20px;
+}
+.agent-test__modes {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 14px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-deep);
+  border-radius: 7px;
+  font-size: 13px;
+}
+.agent-test__modes legend {
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--accent-deep);
+}
+.agent-test__modes label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  cursor: pointer;
+}
+.agent-test__modes:disabled {
+  opacity: 0.65;
+}
+.agent-test__mode-bar p {
+  flex: 1;
+  min-width: 240px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agent-test__phase {
+  color: var(--accent-deep);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.agent-test__reconnect {
+  margin-bottom: 10px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
 .agent-test__online {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   color: var(--success);
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
 }
 .agent-test__online i {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--success);
+  margin-right: 4px;
+}
+.agent-test__online-text {
+  margin-right: 4px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-top: -3px;
 }
 .agent-test__icon-button {
   display: grid;
@@ -58,12 +142,13 @@
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
+  margin-top: 8px;
 }
 .agent-test__workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 270px;
-  height: min(690px, calc(100vh - 220px));
-  min-height: 450px;
+  height: auto;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -79,14 +164,14 @@
 .agent-test__messages {
   flex: 1;
   min-height: 0;
-  padding: 15px clamp(20px, 4vw, 54px);
+  padding: 20px clamp(20px, 2vw, 54px);
   overflow: auto;
 }
 .agent-message {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 12px;
-  margin: 0 0 25px;
+  margin: 0 0 15px;
 }
 .agent-message__avatar {
   display: grid;
@@ -114,10 +199,10 @@
   margin: 5px 0 0;
   line-height: 1.7;
   overflow-wrap: anywhere;
+  font-size: 14px;
 }
 .agent-product {
-  display: flex;
-  align-items: center;
+  display: grid;
   gap: 12px;
   max-width: 560px;
   margin-top: 13px;
@@ -126,27 +211,84 @@
   border-radius: 7px;
   background: #fff;
 }
-.agent-product > svg {
+.agent-product__header {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.agent-product__header > svg {
   flex: 0 0 auto;
   color: var(--accent-deep);
+  margin-top: 2px;
 }
-.agent-product > span {
+.agent-product__identity {
   display: grid;
+  gap: 5px;
   min-width: 0;
   flex: 1;
+}
+.agent-product__name {
+  color: var(--text);
   font-size: 13px;
-  font-weight: 700;
+  line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.agent-product small {
+.agent-product__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
-.agent-product strong {
+.agent-product__price {
+  flex: 0 0 auto;
   color: var(--accent-deep);
   font-size: 14px;
   white-space: nowrap;
+}
+.agent-product__description {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.agent-product__specs {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.agent-product__specs > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.agent-product__specs dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.agent-product__specs dd {
+  margin: 2px 0 0;
+  color: var(--text);
+}
+.agent-product__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.agent-product__footer a {
+  color: var(--accent-deep);
+  font-size: 12px;
+  text-underline-offset: 3px;
 }
 .agent-message__notice {
   margin-top: 10px;
@@ -314,6 +456,7 @@
   border-bottom: 1px solid var(--line);
   color: var(--warning);
   font-size: 12px;
+  flex-wrap: wrap;
 }
 .agent-test__confirm button {
   flex: 0 0 auto;
@@ -325,6 +468,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .agent-test__confirm .agent-test__cancel {
   border: 1px solid var(--line);
@@ -447,7 +591,30 @@
 @media (max-width: 860px) {
   .site-main:has(.agent-test) {
     width: min(100% - 32px, 680px);
+    height: auto;
+    margin: 0 auto;
     padding-top: 22px;
+    overflow: visible;
+  }
+  body:has(.agent-test) {
+    height: auto;
+    overflow: auto;
+  }
+  .agent-test {
+    height: auto;
+    grid-template-rows: auto auto;
+  }
+  .agent-test__heading {
+    flex-wrap: wrap;
+  }
+  .agent-test__identity {
+    flex-wrap: wrap;
+  }
+  .agent-test__mode-bar {
+    flex-wrap: wrap;
+  }
+  .agent-test__modes {
+    flex-wrap: wrap;
   }
   .agent-test__workspace {
     height: calc(100vh - 210px);
@@ -456,9 +623,6 @@
   }
   .agent-test__details {
     display: none;
-  }
-  .agent-test__messages {
-    padding: 20px 16px;
   }
   .agent-test__composer {
     margin: 0 12px 12px;

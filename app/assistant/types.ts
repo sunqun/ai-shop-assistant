@@ -1,13 +1,18 @@
+import type { CatalogProduct } from "@/lib/catalog";
+
 export type AssistantResult = {
   status?: "ready_for_confirmation" | "ordered" | "needs_login" | "needs_authorization" | "failed";
   message?: string;
-  product?: { id?: string; name?: string; price?: number; stock?: number };
+  product?: Partial<CatalogProduct>;
   quote?: {
     quote?: {
       quoteId: string;
       cartVersion: number;
       currency: string;
       totalDueMinor: number;
+      subtotalMinor?: number;
+      discountMinor?: number;
+      shippingMinor?: number;
       expiresAt: string;
     };
   };
@@ -15,6 +20,7 @@ export type AssistantResult = {
 };
 
 export type ChatMessage = {
+  taskId?: string;
   role: "assistant" | "user";
   text: string;
   result?: AssistantResult;

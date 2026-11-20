@@ -71,10 +71,13 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
       }))
     );
   } catch (error) {
-    if (error instanceof Error && error.message === "INVALID_CART_ITEMS") throw new CartServiceError("INVALID_CART_ITEMS");
+    if (error instanceof Error && error.message === "INVALID_CART_ITEMS")
+      throw new CartServiceError("INVALID_CART_ITEMS");
     throw error;
   }
-  const payloadHash = createHash("sha256").update(JSON.stringify({ source: input.source, lines })).digest("hex");
+  const payloadHash = createHash("sha256")
+    .update(JSON.stringify({ source: input.source, lines }))
+    .digest("hex");
   const connection = await getDbPool().getConnection();
   try {
     await connection.beginTransaction();
@@ -83,7 +86,8 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
       [cartId, input.idempotencyKey]
     );
     if (existing.length) {
-      if (existing[0].payload_hash !== payloadHash) throw new CartServiceError("IDEMPOTENCY_KEY_REUSED");
+      if (existing[0].payload_hash !== payloadHash)
+        throw new CartServiceError("IDEMPOTENCY_KEY_REUSED");
       await connection.commit();
       return JSON.parse(existing[0].response_json as string) as ReconcileCartResult;
     }
@@ -92,8 +96,12 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
       "INSERT INTO carts (cart_id, userid, source, cart_version) VALUES (?, ?, ?, 0) ON DUPLICATE KEY UPDATE userid = COALESCE(userid, VALUES(userid)), source = VALUES(source)",
       [cartId, input.userid, input.source]
     );
-    const [ownerRows] = await connection.execute<RowDataPacket[]>("SELECT userid, source FROM carts WHERE cart_id = ? FOR UPDATE", [cartId]);
-    if (!ownerRows.length || ownerRows[0].userid !== input.userid) throw new CartServiceError("CART_OWNER_MISMATCH");
+    const [ownerRows] = await connection.execute<RowDataPacket[]>(
+      "SELECT userid, source FROM carts WHERE cart_id = ? FOR UPDATE",
+      [cartId]
+    );
+    if (!ownerRows.length || ownerRows[0].userid !== input.userid)
+      throw new CartServiceError("CART_OWNER_MISMATCH");
     if (ownerRows[0].source !== input.source) throw new CartServiceError("CART_SOURCE_MISMATCH");
     const [expiredReservations] = await connection.query<RowDataPacket[]>(
       "SELECT cart_id, sku_id, reserved_quantity FROM inventory_reservations WHERE status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP ORDER BY sku_id, cart_id FOR UPDATE"
@@ -103,15 +111,23 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
         "UPDATE inventory_skus SET reserved = reserved - ? WHERE sku_id = ? AND reserved >= ?",
         [expired.reserved_quantity, expired.sku_id, expired.reserved_quantity]
       );
-      if (inventoryUpdate.affectedRows !== 1) throw new Error("INVENTORY_RESERVATION_INVARIANT_FAILED");
+      if (inventoryUpdate.affectedRows !== 1)
+        throw new Error("INVENTORY_RESERVATION_INVARIANT_FAILED");
       const [reservationUpdate] = await connection.execute<ResultSetHeader>(
         "UPDATE inventory_reservations SET status = 'EXPIRED', updated_at = CURRENT_TIMESTAMP WHERE cart_id = ? AND sku_id = ? AND status = 'ACTIVE'",
         [expired.cart_id, expired.sku_id]
       );
-      if (reservationUpdate.affectedRows !== 1) throw new Error("INVENTORY_RESERVATION_INVARIANT_FAILED");
+      if (reservationUpdate.affectedRows !== 1)
+        throw new Error("INVENTORY_RESERVATION_INVARIANT_FAILED");
       await connection.execute(
         "INSERT INTO inventory_reservation_events (event_id, cart_id, sku_id, event_type, quantity, request_key) VALUES (?, ?, ?, 'EXPIRED', ?, ?)",
-        [randomUUID(), expired.cart_id, expired.sku_id, expired.reserved_quantity, input.idempotencyKey]
+        [
+          randomUUID(),
+          expired.cart_id,
+          expired.sku_id,
+          expired.reserved_quantity,
+          input.idempotencyKey,
+        ]
       );
     }
 
@@ -124,7 +140,8 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
         "UPDATE inventory_skus SET reserved = reserved - ? WHERE sku_id = ? AND reserved >= ?",
         [previous.reserved_quantity, previous.sku_id, previous.reserved_quantity]
       );
-      if (inventoryUpdate.affectedRows !== 1) throw new Error("INVENTORY_RESERVATION_INVARIANT_FAILED");
+      if (inventoryUpdate.affectedRows !== 1)
+        throw new Error("INVENTORY_RESERVATION_INVARIANT_FAILED");
       await connection.execute(
         "INSERT INTO inventory_reservation_events (event_id, cart_id, sku_id, event_type, quantity, request_key) VALUES (?, ?, ?, 'RELEASED', ?, ?)",
         [randomUUID(), cartId, previous.sku_id, previous.reserved_quantity, input.idempotencyKey]
@@ -143,31 +160,54 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
       );
       rows = inventoryRows;
     }
-    const balances = new Map<string, StockBalance>(rows.map((row) => [row.sku_id, { onHand: row.on_hand, reserved: row.reserved }]));
+    const balances = new Map<string, StockBalance>(
+      rows.map((row) => [row.sku_id, { onHand: row.on_hand, reserved: row.reserved }])
+    );
     const allocations = allocateCartLines(lines, balances);
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const [cartRows] = await connection.execute<RowDataPacket[]>("SELECT cart_version FROM carts WHERE cart_id = ? FOR UPDATE", [cartId]);
+    const [cartRows] = await connection.execute<RowDataPacket[]>(
+      "SELECT cart_version FROM carts WHERE cart_id = ? FOR UPDATE",
+      [cartId]
+    );
     const cartVersion = Number(cartRows[0]?.cart_version ?? 0) + 1;
 
     await connection.execute("DELETE FROM cart_items WHERE cart_id = ?", [cartId]);
     for (const allocation of allocations) {
       await connection.execute(
         "INSERT INTO cart_items (cart_id, sku_id, requested_quantity, allocated_quantity, unavailable_quantity) VALUES (?, ?, ?, ?, ?)",
-        [cartId, allocation.skuId, allocation.quantity, allocation.allocatedQuantity, allocation.unavailableQuantity]
+        [
+          cartId,
+          allocation.skuId,
+          allocation.quantity,
+          allocation.allocatedQuantity,
+          allocation.unavailableQuantity,
+        ]
       );
       if (allocation.allocatedQuantity > 0) {
-        await connection.execute("UPDATE inventory_skus SET reserved = reserved + ? WHERE sku_id = ?", [allocation.allocatedQuantity, allocation.skuId]);
+        await connection.execute(
+          "UPDATE inventory_skus SET reserved = reserved + ? WHERE sku_id = ?",
+          [allocation.allocatedQuantity, allocation.skuId]
+        );
         await connection.execute(
           "INSERT INTO inventory_reservations (cart_id, sku_id, reserved_quantity, status, expires_at) VALUES (?, ?, ?, 'ACTIVE', ?) ON DUPLICATE KEY UPDATE reserved_quantity = VALUES(reserved_quantity), status = 'ACTIVE', expires_at = VALUES(expires_at)",
           [cartId, allocation.skuId, allocation.allocatedQuantity, expiresAt]
         );
         await connection.execute(
           "INSERT INTO inventory_reservation_events (event_id, cart_id, sku_id, event_type, quantity, request_key) VALUES (?, ?, ?, 'RESERVED', ?, ?)",
-          [randomUUID(), cartId, allocation.skuId, allocation.allocatedQuantity, input.idempotencyKey]
+          [
+            randomUUID(),
+            cartId,
+            allocation.skuId,
+            allocation.allocatedQuantity,
+            input.idempotencyKey,
+          ]
         );
       }
     }
-    await connection.execute("UPDATE carts SET source = ?, cart_version = ?, expires_at = ?, updated_at = CURRENT_TIMESTAMP WHERE cart_id = ?", [input.source, cartVersion, expiresAt, cartId]);
+    await connection.execute(
+      "UPDATE carts SET source = ?, cart_version = ?, expires_at = ?, updated_at = CURRENT_TIMESTAMP WHERE cart_id = ?",
+      [input.source, cartVersion, expiresAt, cartId]
+    );
 
     const result: ReconcileCartResult = {
       cartId,
@@ -175,7 +215,8 @@ export async function reconcileCart(input: ReconcileCartInput): Promise<Reconcil
       cartVersion,
       expiresAt: expiresAt.toISOString(),
       split: allocations.some((item) => item.unavailableQuantity > 0),
-      fullyOutOfStock: allocations.length > 0 && allocations.every((item) => item.allocatedQuantity === 0),
+      fullyOutOfStock:
+        allocations.length > 0 && allocations.every((item) => item.allocatedQuantity === 0),
       allocations,
       quote: { status: "needs_requote", code: "QUOTE_REQUIRED" },
     };

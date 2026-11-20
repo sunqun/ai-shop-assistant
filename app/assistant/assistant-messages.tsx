@@ -1,22 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Bot,
-  Check,
-  CircleAlert,
-  Copy,
-  Link2,
-  LoaderCircle,
-  ShoppingBag,
-  UserRound,
-} from "lucide-react";
+import { Bot, Check, CircleAlert, Copy, Link2, LoaderCircle, UserRound } from "lucide-react";
 import type { AssistantController } from "./use-assistant";
-
-function formatMoney(value: unknown) {
-  const amount = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(amount) ? `¥${amount.toFixed(2)}` : "待核价";
-}
+import { AssistantProductCard } from "./assistant-product-card";
+import { formatMoney } from "./format";
 
 type AssistantMessagesProps = Pick<
   AssistantController,
@@ -45,18 +33,11 @@ export function AssistantMessages({
             </span>
             <p>{message.text}</p>
             {message.result?.product ? (
-              <div className="agent-product">
-                <ShoppingBag size={16} />
-                <span>
-                  {message.result.product.name || "已选商品"}
-                  <small>库存 {message.result.product.stock ?? "—"}</small>
-                </span>
-                <strong>{formatMoney(message.result.product.price)}</strong>
-              </div>
+              <AssistantProductCard product={message.result.product} />
             ) : null}
-            {message.result?.status === "ready_for_confirmation" ? (
+            {message.result?.quote?.quote ? (
               <div className="agent-message__quote">
-                <span>报价总额</span>
+                <span>支付总额</span>
                 <strong>
                   {message.result.quote?.quote
                     ? new Intl.NumberFormat("zh-TW", {
@@ -67,7 +48,22 @@ export function AssistantMessages({
                 </strong>
                 {message.result.quote?.quote ? (
                   <small>
-                    有效至 {new Date(message.result.quote.quote.expiresAt).toLocaleString("zh-TW")}
+                    商品{" "}
+                    {formatMoney(
+                      (message.result.quote.quote.subtotalMinor ?? 0) / 100,
+                      message.result.quote.quote.currency
+                    )}
+                    {" · "}优惠{" "}
+                    {formatMoney(
+                      (message.result.quote.quote.discountMinor ?? 0) / 100,
+                      message.result.quote.quote.currency
+                    )}
+                    {" · "}运费{" "}
+                    {formatMoney(
+                      (message.result.quote.quote.shippingMinor ?? 0) / 100,
+                      message.result.quote.quote.currency
+                    )}
+                    {" · "}数量 1
                   </small>
                 ) : null}
               </div>
@@ -111,6 +107,7 @@ export function AssistantMessages({
           <CircleAlert size={16} />
           <span>{error}</span>
           {error.includes("登录") ? <Link href="/login">前往登录</Link> : null}
+          {error.includes("授权") ? <Link href="/orders">前往完成授权</Link> : null}
         </div>
       ) : null}
     </div>

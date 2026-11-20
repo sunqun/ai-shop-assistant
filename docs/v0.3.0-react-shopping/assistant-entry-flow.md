@@ -1,6 +1,10 @@
-# 两个助手入口的当前逻辑
+# 两个助手入口的历史流程（v0.3）
 
-本文按当前实现梳理 `search-products-agent.ts` 与 `auto-shopping.ts` 的入口、共用逻辑及下单路径。
+> 本文保留为双模式任务改造前的历史快照，以下流程及“现状”描述不代表当前 `/assistant` 页面实现。
+>
+> **当前版本请查看：[v0.4 两个助手的当前流程图](../v0.4-dual-shopping-modes/assistant-entry-flow.md)。** 页面已改用任务接口，新增手动/自动模式、取消互斥、短链及恢复分支；旧 `/react` 和 `/react/confirm` 仍保留为兼容接口。
+
+本历史快照梳理早期 `search-products-agent.ts` 与 `auto-shopping.ts` 的入口、共用逻辑及下单路径。
 
 ## 总览流程
 

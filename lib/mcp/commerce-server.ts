@@ -1,6 +1,7 @@
 import { reconcileCart, CartServiceError } from "@/lib/cart-service/cart-service";
 import { quoteCart, QuoteServiceError } from "@/lib/quote-service";
 import { submitAiOrder, OrderServiceError } from "@/lib/order-service";
+import { assertNotTaskQuote, ShoppingTaskError } from "@/lib/agent/shopping-task-store";
 import type {
   CartToolOutput,
   OrderToolOutput,
@@ -47,12 +48,14 @@ function errorResult(error: unknown): {
   error: { code: string; message: string; retryable?: boolean };
 } {
   const code =
+    error instanceof ShoppingTaskError ||
     error instanceof CartServiceError ||
     error instanceof QuoteServiceError ||
     error instanceof OrderServiceError
       ? error.code
       : "COMMERCE_SERVICE_UNAVAILABLE";
   const messages: Record<string, string> = {
+    TASK_CONFIRM_REQUIRED: "请通过当前购物任务确认订单。",
     UNAUTHENTICATED: "请先登录后再提交订单。",
     AUTHORIZATION_REQUIRED: "请先完成 AI 自助下单授权。",
     CART_SOURCE_MISMATCH: "购物车来源无效。",
@@ -91,11 +94,9 @@ export async function callCommerceTool(
     if (
       !call ||
       typeof call !== "object" ||
-      ![
-        "commerce.reconcile_cart",
-        "commerce.quote_cart",
-        "commerce.submit_order",
-      ].includes(call.name)
+      !["commerce.reconcile_cart", "commerce.quote_cart", "commerce.submit_order"].includes(
+        call.name
+      )
     ) {
       return { ok: false, error: { code: "MCP_TOOL_NOT_FOUND", message: "交易工具不存在。" } };
     }
@@ -103,11 +104,7 @@ export async function callCommerceTool(
       const input = call.arguments as ReconcileCartToolInput;
       if (!validUserid(context.userid))
         return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再继续操作。" } };
-      if (
-        !input ||
-        !validItems(input.items) ||
-        !validKey(input.idempotencyKey)
-      ) {
+      if (!input || !validItems(input.items) || !validKey(input.idempotencyKey)) {
         return {
           ok: false,
           error: { code: "MCP_INVALID_ARGUMENTS", message: "AI 购物车参数无效。" },
@@ -144,6 +141,7 @@ export async function callCommerceTool(
     ) {
       return { ok: false, error: { code: "MCP_INVALID_ARGUMENTS", message: "AI 下单参数无效。" } };
     }
+    await assertNotTaskQuote(context.userid, input.quoteId);
     return { ok: true, data: await submitAiOrder({ ...input, userid: context.userid }) };
   } catch (error) {
     console.error(

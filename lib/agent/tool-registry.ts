@@ -32,12 +32,12 @@ export const agentToolRegistry = {
   search_products: (
     input: CatalogSearchToolInput
   ): Promise<McpToolResult<CatalogSearchToolOutput>> => callCatalogSearchTool(input),
-  // 合并购物车：将用户多来源/冲突的购物车项合并为一致状态
+  // 写购物车 + 锁定库存：将用户多来源/冲突的购物车项合并为一致状态
   reconcile_cart: (
     input: ReconcileCartToolInput,
     context: { userid: string }
   ): Promise<McpToolResult<CartToolOutput>> => callAiReconcileCartTool(input, context),
-  // 引用购物车：基于当前购物车生成报价预览
+  // 校验库存 + 生成报价：基于当前购物车生成报价预览
   quote_cart: (
     input: QuoteCartToolInput,
     context: { userid: string }

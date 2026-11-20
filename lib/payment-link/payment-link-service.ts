@@ -109,6 +109,8 @@ export async function createPaymentLink(input: {
   userid: string;
   productId: string;
   quantity: number;
+  /** 仅供服务端任务恢复使用的稳定 ID；网页接口不接收此字段。 */
+  linkId?: string;
 }): Promise<PaymentLinkView> {
   if (
     !/^[A-Za-z0-9._-]{1,100}$/.test(input.productId) ||
@@ -117,14 +119,28 @@ export async function createPaymentLink(input: {
     input.quantity > 99
   )
     throw new PaymentLinkError("INVALID_PAYMENT_LINK_REQUEST");
+  if (input.linkId) {
+    if (!/^[0-9a-f-]{36}$/i.test(input.linkId))
+      throw new PaymentLinkError("INVALID_PAYMENT_LINK_REQUEST");
+    const existing = await readLink("pl.link_id = ?", [input.linkId]);
+    if (existing) {
+      if (
+        String(existing.userid) !== input.userid ||
+        String(existing.product_id) !== input.productId ||
+        Number(existing.quantity) !== input.quantity
+      )
+        throw new PaymentLinkError("INVALID_PAYMENT_LINK_REQUEST");
+      return toView(existing);
+    }
+  }
   const product = await getCatalogProduct(input.productId);
   if (!product) throw new PaymentLinkError("PRODUCT_NOT_FOUND");
   const token = randomBytes(32).toString("base64url");
   const cartToken = randomBytes(32).toString("base64url");
   await getDbPool().execute(
-    "INSERT INTO payment_links (link_id, token_value, token_hash, userid, cart_token, product_id, quantity) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO payment_links (link_id, token_value, token_hash, userid, cart_token, product_id, quantity) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE link_id = link_id",
     [
-      randomUUID(),
+      input.linkId ?? randomUUID(),
       token,
       tokenHash(token),
       input.userid,
@@ -133,7 +149,9 @@ export async function createPaymentLink(input: {
       input.quantity,
     ]
   );
-  const row = await readLink("pl.token_hash = ?", [tokenHash(token)]);
+  const row = input.linkId
+    ? await readLink("pl.link_id = ? AND pl.userid = ?", [input.linkId, input.userid])
+    : await readLink("pl.token_hash = ?", [tokenHash(token)]);
   if (!row) throw new PaymentLinkError("PAYMENT_LINK_UNAVAILABLE");
   return mapView(row, product);
 }
