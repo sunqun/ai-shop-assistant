@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { runReAct, ReActLimitError } from "@/lib/llm/react";
+import { runReAct, ReActLimitError } from "@/lib/llm/reAct";
 import type { InvokeResult, LLMClient, Tool } from "@/lib/llm/type";
 
 function tool(name: string, execute = vi.fn(async () => ({ ok: true }))): Tool {

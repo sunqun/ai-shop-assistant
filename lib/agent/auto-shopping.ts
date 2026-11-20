@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createLLMFromEnv } from "@/lib/llm";
-import { runReAct } from "@/lib/llm/react";
+import { runReAct } from "@/lib/llm/reAct";
 import type { Message, Tool } from "@/lib/llm/type";
 import { z } from "zod";
 import { searchProductsForAgent } from "@/lib/agent/search-products-agent";
