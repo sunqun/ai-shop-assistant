@@ -1,6 +1,6 @@
 import type { RowDataPacket } from "mysql2/promise";
 import { randomUUID } from "node:crypto";
-import { getDbPool } from "@/lib/db";
+import { getDbPool } from "@/lib/repository/db";
 
 export type UserRecord = {
   userid: string;

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/auth-server";
 import { runShoppingReAct } from "@/lib/agent/auto-shopping";
-import { getActiveTask } from "@/lib/agent/shopping-task-store";
+import { getActiveTask } from "@/lib/shop-task/shopping-task-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

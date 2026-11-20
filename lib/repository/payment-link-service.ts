@@ -1,10 +1,10 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getCatalogProduct } from "@/lib/catalog";
-import { getDbPool } from "@/lib/db";
-import { reconcileCart } from "@/lib/cart-service/cart-service";
-import { quoteCart } from "@/lib/quote-service";
-import { submitAiOrder } from "@/lib/order-service";
+import { getDbPool } from "@/lib/repository/db";
+import { reconcileCart } from "@/lib/repository/cart-service";
+import { quoteCart } from "@/lib/repository/quote-service";
+import { submitAiOrder } from "@/lib/repository/order-service";
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 

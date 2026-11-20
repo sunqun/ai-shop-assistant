@@ -11,7 +11,7 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { getDbPool } from "@/lib/db";
+import { getDbPool } from "@/lib/repository/db";
 
 export const runtime = "nodejs";
 

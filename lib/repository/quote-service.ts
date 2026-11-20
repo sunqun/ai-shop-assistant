@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
-import { deriveUserCartId } from "@/lib/cart-service/cart-session";
-import { getDbPool } from "@/lib/db";
+import { deriveUserCartId } from "@/lib/repository/cart-session";
+import { getDbPool } from "@/lib/repository/db";
 import { calculateBestQuote, lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCatalogProducts } from "@/lib/catalog";
 import type { QuoteToolOutput } from "@/lib/mcp/types";

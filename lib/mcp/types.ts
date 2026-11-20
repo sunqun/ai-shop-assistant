@@ -49,8 +49,8 @@ export type SubmitOrderToolInput = {
   idempotencyKey: string;
 };
 export type CreatePaymentLinkToolInput = { productId: string; quantity: number };
-export type CreatePaymentLinkToolOutput = import("@/lib/payment-link/payment-link-service").PaymentLinkView;
-export type CartToolOutput = import("@/lib/cart-service/cart-service").ReconcileCartResult;
+export type CreatePaymentLinkToolOutput = import("@/lib/repository/payment-link-service").PaymentLinkView;
+export type CartToolOutput = import("@/lib/repository/cart-service").ReconcileCartResult;
 export type QuoteToolOutput = {
   quote: {
     quoteId: string;

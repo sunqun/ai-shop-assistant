@@ -1,4 +1,4 @@
-import type { UserOrderView } from "@/lib/order-service";
+import type { UserOrderView } from "@/lib/repository/order-service";
 
 export type { UserOrderView };
 

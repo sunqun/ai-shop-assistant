@@ -1,4 +1,4 @@
-import { createPaymentLink, PaymentLinkError } from "@/lib/payment-link/payment-link-service";
+import { createPaymentLink, PaymentLinkError } from "@/lib/repository/payment-link-service";
 import type {
   CreatePaymentLinkToolInput,
   CreatePaymentLinkToolOutput,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { shoppingTaskResponse } from "@/lib/agent/shopping-task-http";
-import { getTask, taskView } from "@/lib/agent/shopping-task-store";
+import { shoppingTaskResponse } from "@/lib/shop-task/shopping-task-http";
+import { getTask, taskView } from "@/lib/shop-task/shopping-task-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

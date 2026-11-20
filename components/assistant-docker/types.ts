@@ -42,3 +42,13 @@ export type OrderReceipt = {
   shippingMinor: number;
   totalMinor: number;
 };
+
+export type PaymentLinkView = {
+  linkId: string;
+  token: string;
+  urlToken: string;
+  username: string;
+  product: { id: string; name: string; price: number; currency: string; stock: number };
+  quantity: number;
+  createdAt: string;
+};

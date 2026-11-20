@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowUp, Check, LoaderCircle, X } from "lucide-react";
-import { SHOPPING_PHASE_LABELS } from "@/lib/agent/shopping-task-types";
+import { SHOPPING_PHASE_LABELS } from "@/lib/shop-task/shopping-task-types";
 import type { AssistantController } from "./use-assistant";
 
 export function AssistantComposer({ controller }: { controller: AssistantController }) {

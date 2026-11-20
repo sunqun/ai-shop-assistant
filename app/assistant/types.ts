@@ -1,7 +1,7 @@
 import type { CatalogProduct } from "@/lib/catalog";
 
 export type AssistantResult = {
-  status?: "ready_for_confirmation" | "ordered" | "needs_login" | "needs_authorization" | "failed";
+  status?: "ready_for_confirmation" | "ordered" | "needs_login" | "needs_authorization" | "needs_clarification" | "failed";
   message?: string;
   product?: Partial<CatalogProduct>;
   quote?: {

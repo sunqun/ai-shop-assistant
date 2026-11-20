@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { QuoteServiceError, quoteCart } from "@/lib/quote-service";
+import { QuoteServiceError, quoteCart } from "@/lib/repository/quote-service";
 import { readSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";

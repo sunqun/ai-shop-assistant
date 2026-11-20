@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/auth-server";
-import { getUserOrder } from "@/lib/order-service";
+import { getUserOrder } from "@/lib/repository/order-service";
 
 export const runtime = "nodejs";
 

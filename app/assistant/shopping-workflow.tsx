@@ -3,7 +3,7 @@ import {
   SHOPPING_PHASE_LABELS,
   type ShoppingMode,
   type ShoppingPhase,
-} from "@/lib/agent/shopping-task-types";
+} from "@/lib/shop-task/shopping-task-types";
 
 export function ShoppingWorkflow({ mode, phase }: { mode: ShoppingMode; phase?: ShoppingPhase }) {
   return (

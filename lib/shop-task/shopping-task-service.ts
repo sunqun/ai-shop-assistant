@@ -1,9 +1,22 @@
+/**
+ * 购物任务（Shopping Task）业务编排层。
+ *
+ * 负责把 shopping-task-store 提供的"存取与原子状态迁移"原语组织成完整业务流程：
+ *   - createShoppingTask：创建任务（前置校验 AI 下单授权）
+ *   - prepare：运行 ReAct 准备商品与报价（搜索 → 选品 → 加购 → 报价）
+ *   - commitOrder：在取得提交权后真正下单（消费库存预留）
+ *   - finishCancellation：取消后生成支付短链
+ *   - actOnShoppingTask：统一动作入口，在持锁状态下做状态机迁移
+ *
+ * 核心约束：所有状态迁移都发生在 updateTask 持有的行锁事务内；事务内不调用模型/业务工具，
+ * 真正耗时的模型调用与下单在锁外执行，通过 operationToken 抢占与释放保证互斥。
+ */
 import { randomUUID } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
-import { getDbPool } from "@/lib/db";
-import { runShoppingReAct } from "./auto-shopping";
-import { submitAiOrder, OrderServiceError } from "@/lib/order-service";
-import { createPaymentLink } from "@/lib/payment-link/payment-link-service";
+import { getDbPool } from "@/lib/repository/db";
+import { runShoppingReAct } from "../agent/auto-shopping";
+import { submitAiOrder, OrderServiceError } from "@/lib/repository/order-service";
+import { createPaymentLink } from "@/lib/repository/payment-link-service";
 import {
   CANCELLABLE_PHASES,
   TERMINAL_PHASES,
@@ -20,13 +33,16 @@ import {
   type TaskRecord,
 } from "./shopping-task-store";
 
+// 自动模式在报价完成后等待的延时，前端到期后再 advance，服务端会二次校验真实截止时间。
 const AUTO_DELAY_MS = 3000;
 
+// 释放任务当前持有的操作令牌，表示本次耗时操作已结束。
 function release(task: TaskRecord) {
   task.operationToken = null;
   task.operationStartedAt = null;
 }
 
+// 创建购物任务：先校验用户已完成 AI 下单授权，再写入任务并返回前端视图。
 export async function createShoppingTask(input: {
   userid: string;
   query: string;
@@ -46,15 +62,19 @@ export async function createShoppingTask(input: {
   return taskView(await createTask(input));
 }
 
+// 准备阶段：运行 ReAct，让模型搜索商品、选品、加入购物车（锁库存）并生成报价。
+// 这里 confirmOrder 恒为 false，实际下单由提交屏障（commitOrder）控制，模型不能自行下单。
 async function prepare(userid: string, taskId: string, token: string, task: TaskRecord) {
+  let outcome: Awaited<ReturnType<typeof runShoppingReAct>> | undefined;
   try {
-    await runShoppingReAct({
+    outcome = await runShoppingReAct({
       userid,
       query: task.query,
       confirmOrder: false,
       control: {
         signal: AbortSignal.timeout(90_000),
         cartIdempotencyKey: `shopping:${taskId}:cart`,
+        // 每个工具真正执行前，先检查任务是否仍属于本次操作、是否已被取消。
         beforeTool: async (phase) => {
           await updateTask(userid, taskId, (current) => {
             if (current.operationToken !== token || current.phase === "cancel_pending") {
@@ -65,6 +85,7 @@ async function prepare(userid: string, taskId: string, token: string, task: Task
             if (phase) current.phase = phase;
           });
         },
+        // 工具产出（商品/报价等）写回任务数据，供前端轮询与后续下单使用。
         onProgress: async (data) => {
           await updateTask(userid, taskId, (current) => {
             if (current.operationToken === token) current.data = { ...current.data, ...data };
@@ -73,32 +94,44 @@ async function prepare(userid: string, taskId: string, token: string, task: Task
       },
     });
   } catch (error) {
+    // 准备被取消或中断时仅记录日志，最终状态在下方根据快照收敛。
     console.warn("shopping task preparation stopped", {
       taskId,
       type: error instanceof Error ? error.name : "unknown",
     });
   }
   const prepared = await updateTask(userid, taskId, (current) => {
+    // 令牌已不匹配（被取消/抢占）则不再推进。
     if (current.operationToken !== token) return;
     release(current);
+    // 已进入取消分支时保持取消状态，由 finishCancellation 收尾。
     if (current.phase === "cancel_pending") return;
-    if (current.data.quote && current.data.product) {
+    if (outcome?.status === "needs_clarification" || current.data.clarification) {
+      // 需求不明确，进入澄清终态，不再自动推进。
+      current.phase = "needs_clarification";
+      current.commitAfter = null;
+      current.data.clarification = outcome?.message ?? current.data.clarification;
+    } else if (current.data.quote && current.data.product) {
+      // 商品与报价就绪，按模式分叉：手动待确认 / 自动待提交。
       current.phase = current.mode === "manual" ? "awaiting_confirmation" : "ready_to_order";
       current.commitAfter =
         current.mode === "auto" ? new Date(Date.now() + AUTO_DELAY_MS).toISOString() : null;
     } else {
       current.phase = "failed";
-      current.data.error = "助手未能完成商品与报价准备，请重新发起购物需求。";
+      current.data.error = outcome?.message ?? "助手未能完成商品与报价准备，请重新发起购物需求。";
     }
   });
+  // 若准备期间被取消且无在途操作，则补跑取消收尾。
   if (prepared.phase === "cancel_pending" && !prepared.operationToken)
     await finishCancellation(userid, taskId);
 }
 
+// 取消收尾：在取消被接受后，用已选商品生成支付短链；没有商品则直接结束为无短链。
 async function finishCancellation(userid: string, taskId: string) {
   const token = randomUUID();
   let acquired = false;
   const task = await updateTask(userid, taskId, (current) => {
+    // 仅在 cancel_pending 且无其他操作占用时接管本次收尾。
     if (current.phase !== "cancel_pending" || current.operationToken) return;
     if (!current.data.product) {
       current.phase = "canceled_no_product";
@@ -135,10 +168,12 @@ async function finishCancellation(userid: string, taskId: string) {
   }
 }
 
+// 提交订单：消费库存预留并创建订单；成功/失败分别收敛任务状态。
 async function commitOrder(userid: string, taskId: string, token: string, task: TaskRecord) {
   const quote = task.data.quote?.quote;
   if (!quote) throw new ShoppingTaskError("QUOTE_REQUIRED", "请先生成有效报价。");
   try {
+    // 幂等键按任务派生，重试/恢复不会重复下单。
     const order = await submitAiOrder({
       userid,
       cartVersion: quote.cartVersion,
@@ -156,6 +191,7 @@ async function commitOrder(userid: string, taskId: string, token: string, task: 
     await updateTask(userid, taskId, (current) => {
       if (current.operationToken !== token) return;
       if (error instanceof OrderServiceError) {
+        // 已知业务错误：明确失败，提示用户重新获取报价。
         current.phase = "failed";
         current.data.errorCode = error.code;
         current.data.error =
@@ -174,6 +210,7 @@ async function commitOrder(userid: string, taskId: string, token: string, task: 
 
 export type ShoppingTaskAction = "advance" | "cancel" | "confirm" | "retry-link" | "recover";
 
+// 任务动作统一入口：在持锁事务内完成状态机迁移，锁外执行对应的耗时操作。
 export async function actOnShoppingTask(
   userid: string,
   taskId: string,
@@ -183,6 +220,7 @@ export async function actOnShoppingTask(
   const token = randomUUID();
   let operation: "prepare" | "commit" | "cancel" | null = null;
   const task = await updateTask(userid, taskId, (current) => {
+    // 取消：已处于取消相关状态则幂等返回；仅可取消阶段可进入 cancel_pending。
     if (action === "cancel") {
       if (
         [
@@ -203,6 +241,7 @@ export async function actOnShoppingTask(
       if (!current.operationToken) operation = "cancel";
       return;
     }
+    // 重试短链：仅取消后短链失败的任务可重试，重新进入取消收尾。
     if (action === "retry-link") {
       if (current.phase === "canceled" || current.phase === "link_creating") return;
       if (current.phase !== "canceled_link_failed")
@@ -211,8 +250,10 @@ export async function actOnShoppingTask(
       operation = "cancel";
       return;
     }
+    // 终态任务不再推进任何动作。
     if (TERMINAL_PHASES.includes(current.phase)) return;
     if (current.operationToken) {
+      // 有进行中的操作：未超时则忽略本次请求；超时后按阶段决定恢复或失败。
       if (!isOperationStale(current)) return;
       // 不重放中断的准备步骤；订单必须按原幂等键恢复。
       if (["committing", "reconciling_result"].includes(current.phase)) {
@@ -227,10 +268,16 @@ export async function actOnShoppingTask(
       }
       release(current);
     }
+    // 进入取消收尾。
     if (current.phase === "cancel_pending") {
       operation = "cancel";
       return;
     }
+    // 正常推进分支：
+    //   1) queued + advance → 准备（进入 searching）
+    //   2) manual + awaiting_confirmation + confirm → 提交
+    //   3) auto + ready_to_order + advance（到期后）→ 提交
+    //   4) committing/reconciling_result + recover → 按原幂等键恢复提交
     if (current.phase === "queued" && action === "advance") {
       operation = "prepare";
       current.phase = "searching";
@@ -260,10 +307,12 @@ export async function actOnShoppingTask(
     ) {
       operation = "commit";
     } else return;
+    // 提交动作先把状态迁到 committing，从此刻起拒绝取消。
     if (operation === "commit") current.phase = "committing";
     current.operationToken = token;
     current.operationStartedAt = new Date().toISOString();
   });
+  // 锁外执行对应的耗时操作，完成后回写结果。
   if (operation === "prepare") await prepare(userid, taskId, token, task);
   else if (operation === "commit") await commitOrder(userid, taskId, token, task);
   else if (operation === "cancel") await finishCancellation(userid, taskId);

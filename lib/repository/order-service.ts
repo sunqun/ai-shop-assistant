@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { getDbPool } from "@/lib/db";
-import { deriveUserCartId } from "@/lib/cart-service/cart-session";
+import { getDbPool } from "@/lib/repository/db";
+import { deriveUserCartId } from "@/lib/repository/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
 import { lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
 import type { OrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";

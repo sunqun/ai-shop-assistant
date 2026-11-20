@@ -6,7 +6,7 @@ import {
   SHOPPING_PHASE_LABELS,
   type ShoppingMode,
   type ShoppingTask,
-} from "@/lib/agent/shopping-task-types";
+} from "@/lib/shop-task/shopping-task-types";
 import {
   createShoppingTaskRequest,
   getActiveShoppingTaskRequest,
@@ -55,7 +55,7 @@ export function useAssistant() {
     const message: ChatMessage = {
       taskId: next.taskId,
       role: "assistant",
-      text: next.error || SHOPPING_PHASE_LABELS[next.phase],
+      text: next.clarification || next.error || SHOPPING_PHASE_LABELS[next.phase],
       result: {
         status:
           next.phase === "ordered" ? "ordered" : next.quote ? "ready_for_confirmation" : undefined,

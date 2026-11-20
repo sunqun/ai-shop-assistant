@@ -1,5 +1,5 @@
 import type { RowDataPacket } from "mysql2/promise";
-import { getDbPool } from "@/lib/db";
+import { getDbPool } from "@/lib/repository/db";
 import type { CatalogCategory } from "./types";
 
 export async function listCategories(): Promise<CatalogCategory[]> {

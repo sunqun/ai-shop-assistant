@@ -1,5 +1,5 @@
 import { request } from "@/lib/auth/auth-retry";
-import type { ShoppingMode, ShoppingTask } from "@/lib/agent/shopping-task-types";
+import type { ShoppingMode, ShoppingTask } from "@/lib/shop-task/shopping-task-types";
 
 type TaskResponse = { task: ShoppingTask };
 const base = "/api/v1/assistant/tasks";

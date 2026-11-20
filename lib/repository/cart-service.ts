@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { getDbPool } from "@/lib/db";
+import { getDbPool } from "@/lib/repository/db";
 import { allocateCartLines, normalizeCartLines, type StockBalance } from "@/lib/inventory-domain";
-import { deriveUserCartId } from "@/lib/cart-service/cart-session";
+import { deriveUserCartId } from "@/lib/repository/cart-session";
 
 export type CartSource = "WEB" | "AI";
 export type CartMutationItem = { id?: unknown; quantity?: unknown };

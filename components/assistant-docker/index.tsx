@@ -9,15 +9,14 @@ import {
   createPaymentLinkRequest,
   deletePaymentLinkRequest,
   listPaymentLinksRequest,
-  type PaymentLinkView,
-} from "@/lib/payment-link/payment-link-client";
+} from "./api";
 import { showToast } from "@/lib/toast";
 import { ArrowRight, Bot, Sparkles } from "lucide-react";
 import { getProductDetailRequest, searchProductsRequest } from "./api";
 import { PaymentLinks } from "./payment-link";
 import { ProductDetailDialog } from "./product-detail";
 import { OrderResultDialog } from "./order-result";
-import type { AgentProduct, AgentReview, OrderReceipt } from "./types";
+import type { AgentProduct, AgentReview, OrderReceipt, PaymentLinkView } from "./types";
 
 export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();

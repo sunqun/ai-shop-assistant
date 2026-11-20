@@ -4,7 +4,7 @@ import {
   getPaymentLink,
   PaymentLinkError,
   submitPaymentLinkOrder,
-} from "@/lib/payment-link/payment-link-service";
+} from "@/lib/repository/payment-link-service";
 
 export const runtime = "nodejs";
 
