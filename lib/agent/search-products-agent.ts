@@ -1,4 +1,4 @@
-import { isEmptyIntent, makeIntentSummary, mergeIntent, parseProductSearchIntentWithMode } from "@/lib/assistant-agent";
+import { isEmptyIntent, makeIntentSummary, mergeIntent, parseProductSearchIntentWithMode } from "@/lib/intent";
 import { invokeAgentTool } from "@/lib/agent/tool-registry";
 import { appendTurn, getOrCreateSession } from "@/lib/agent/session-store";
 import type { CatalogSearchToolOutput } from "@/lib/mcp/types";

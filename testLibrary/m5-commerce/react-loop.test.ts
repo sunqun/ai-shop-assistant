@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { runReAct, ReActLimitError } from "@/llm/react";
-import type { InvokeResult, LLMClient, Tool } from "@/llm/type";
+import { runReAct, ReActLimitError } from "@/lib/llm/react";
+import type { InvokeResult, LLMClient, Tool } from "@/lib/llm/type";
 
 function tool(name: string, execute = vi.fn(async () => ({ ok: true }))): Tool {
   return { inputSchema: z.object({}), execute };

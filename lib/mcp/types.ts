@@ -4,7 +4,7 @@
  * 这里使用进程内传输，保持与未来独立 MCP Server 的 JSON-RPC/HTTP 传输
  * 兼容：调用方只依赖工具名、参数和结构化结果，不依赖数据库实现。
  */
-export type McpToolName = "catalog.search_products" | "commerce.ai_reconcile_cart" | "commerce.ai_quote_cart" | "commerce.ai_submit_order" | "commerce.create_payment_link";
+export type McpToolName = "catalog.search_products" | "commerce.reconcile_cart" | "commerce.quote_cart" | "commerce.submit_order" | "commerce.create_payment_link";
 
 export type McpError = {
   code: string;
@@ -20,12 +20,12 @@ export type McpToolCall<TName extends McpToolName = McpToolName> = {
   name: TName;
   arguments: TName extends "catalog.search_products"
     ? CatalogSearchToolInput
-    : TName extends "commerce.ai_reconcile_cart"
-      ? AiReconcileCartToolInput
-      : TName extends "commerce.ai_quote_cart"
-        ? AiQuoteCartToolInput
-      : TName extends "commerce.ai_submit_order"
-        ? AiSubmitOrderToolInput
+    : TName extends "commerce.reconcile_cart"
+      ? ReconcileCartToolInput
+      : TName extends "commerce.quote_cart"
+        ? QuoteCartToolInput
+      : TName extends "commerce.submit_order"
+        ? SubmitOrderToolInput
         : CreatePaymentLinkToolInput;
 };
 
@@ -38,20 +38,20 @@ export type CatalogSearchToolInput = {
 export type CatalogSearchToolOutput = import("@/lib/catalog").ProductSearchPage;
 
 export type AiCartItemInput = { id: string; quantity: number };
-export type AiReconcileCartToolInput = {
+export type ReconcileCartToolInput = {
   items: AiCartItemInput[];
   idempotencyKey: string;
 };
-export type AiQuoteCartToolInput = { cartVersion: number };
-export type AiSubmitOrderToolInput = {
+export type QuoteCartToolInput = { cartVersion: number };
+export type SubmitOrderToolInput = {
   cartVersion: number;
   quoteId: string;
   idempotencyKey: string;
 };
 export type CreatePaymentLinkToolInput = { productId: string; quantity: number };
 export type CreatePaymentLinkToolOutput = import("@/lib/payment-link/payment-link-service").PaymentLinkView;
-export type AiCartToolOutput = import("@/lib/cart-service/cart-service").ReconcileCartResult;
-export type AiQuoteToolOutput = {
+export type CartToolOutput = import("@/lib/cart-service/cart-service").ReconcileCartResult;
+export type QuoteToolOutput = {
   quote: {
     quoteId: string;
     cartId: string;
@@ -68,7 +68,7 @@ export type AiQuoteToolOutput = {
   };
   appliedRules: string[];
 };
-export type AiOrderToolOutput = {
+export type OrderToolOutput = {
   orderGroupId: string;
   source: "AI";
   orders: Array<{ orderId: string }>;

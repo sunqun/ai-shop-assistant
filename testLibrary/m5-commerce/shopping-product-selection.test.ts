@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectTopInStockProduct } from "@/lib/agent/shopping-react";
+import { selectTopInStockProduct } from "@/lib/agent/auto-shopping";
 
 describe("shopping agent product selection", () => {
   it("preserves catalog ranking and skips out-of-stock products", () => {

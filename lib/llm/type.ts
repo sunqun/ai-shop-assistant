@@ -21,6 +21,8 @@ export interface Message {
 
 export interface Tool<IParams = any, TResult = any> {
     description?: string
+    /** Allow retrying execute failures only for tools known to be safe to repeat. */
+    retryOnExecutionError?: boolean
     inputSchema: ZodType<IParams>
     execute: (params: IParams, context?: { signal?: AbortSignal }) => Promise<TResult>
 }
@@ -47,6 +49,7 @@ export interface InvokeResult<TResult = unknown> {
 export interface InvokeOptions {
     toolChoiceName?: string // 必须调用某个具体工具
     normalizeResponse?: (response: any) => any
+    temperature?: number // 采样温度，用于需要确定性的调用（如意图解析）
 }
 
 export interface LLMConfig {

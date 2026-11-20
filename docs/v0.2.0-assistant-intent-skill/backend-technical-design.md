@@ -211,4 +211,4 @@ const sessions = new Map<string, { turns: AssistantTurn[]; updatedAt: number }>(
 
 ## 9. 与 ReAct 的边界
 
-本期**不引入 ReAct/工具循环**：意图解析是单次工具调用即可完成的抽取任务。未来若要做端到端购物助手（搜索→看结果→再筛/加购/报价/下单的自主编排），可在既有 `lib/agent/tool-registry.ts`（已注册 `search_products`/`ai_reconcile_cart`/`ai_quote_cart`/`ai_submit_order`）之上扩展循环，但那是独立 scope，不在本期交付。
+本期**不引入 ReAct/工具循环**：意图解析是单次工具调用即可完成的抽取任务。未来若要做端到端购物助手（搜索→看结果→再筛/加购/报价/下单的自主编排），可在既有 `lib/agent/tool-registry.ts`（已注册 `search_products`/`reconcile_cart`/`quote_cart`/`submit_order`）之上扩展循环，但那是独立 scope，不在本期交付。

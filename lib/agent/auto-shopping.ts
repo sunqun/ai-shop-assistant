@@ -1,27 +1,23 @@
 import { randomUUID } from "node:crypto";
-import { LLM, runReAct, type Message, type Tool } from "@/llm";
+import { createLLMFromEnv } from "@/lib/llm";
+import { runReAct } from "@/lib/llm/react";
+import type { Message, Tool } from "@/lib/llm/type";
 import { z } from "zod";
-import { searchProductsForAgent } from "@/lib/agent/orchestrator";
+import { searchProductsForAgent } from "@/lib/agent/search-products-agent";
 import { invokeAgentTool } from "@/lib/agent/tool-registry";
 import type { CatalogProduct } from "@/lib/catalog";
-import type { AiQuoteToolOutput } from "@/lib/mcp/types";
+import type { QuoteToolOutput } from "@/lib/mcp/types";
 
 type ShoppingFinal = {
   status: "ready_for_confirmation" | "ordered" | "needs_login" | "needs_authorization" | "failed";
   message: string;
   product?: CatalogProduct;
-  quote?: AiQuoteToolOutput;
+  quote?: QuoteToolOutput;
   order?: unknown;
 };
 
 export function selectTopInStockProduct<T extends { stock: number }>(products: T[]): T | undefined {
   return products.find((product) => product.stock > 0);
-}
-
-function env(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
 }
 
 export async function runShoppingReAct(input: {
@@ -33,17 +29,25 @@ export async function runShoppingReAct(input: {
   let candidates: CatalogProduct[] = [];
   let selected: CatalogProduct | undefined;
   let cartVersion: number | undefined;
-  let quote: AiQuoteToolOutput | undefined;
-  const llm = new LLM({
-    baseURL: env("MODEL_BASE_URL"),
-    model: env("MODEL"),
-    apiKey: process.env.DEEPSEEK_API_KEY?.trim() ?? "",
-    maxRetries: 1,
+  let quote: QuoteToolOutput | undefined;
+  const llm = createLLMFromEnv();
+  // This endpoint is a single HTTP response rather than a streamed UI session,
+  // so expose retry progress in server logs while the shared client retries safely.
+  llm.addEventListener("retry", (event) => {
+    const { attempt, maxAttempts, lastError } = (
+      event as CustomEvent<{ attempt: number; maxAttempts: number; lastError: unknown }>
+    ).detail;
+    const errorType =
+      lastError && typeof lastError === "object" && "type" in lastError
+        ? String(lastError.type)
+        : "unknown";
+    console.warn("shopping assistant model retry", { attempt, maxAttempts, errorType });
   });
 
   const tools: Record<string, Tool> = {
     search_products: {
       description: "Search the real product catalog for the user's request.",
+      retryOnExecutionError: true,
       inputSchema: z.object({ query: z.string().trim().min(1).max(1000) }).strict(),
       execute: async ({ query }: { query: string }) => {
         const result = await searchProductsForAgent(query, 100, undefined, input.sessionId);
@@ -72,7 +76,7 @@ export async function runShoppingReAct(input: {
       execute: async ({ quantity }: { quantity: number }) => {
         if (!selected) throw new Error("Select a product before adding to cart");
         const result = await invokeAgentTool(
-          "ai_reconcile_cart",
+          "reconcile_cart",
           {
             items: [{ id: selected.id, quantity }],
             idempotencyKey: randomUUID(),
@@ -90,7 +94,7 @@ export async function runShoppingReAct(input: {
       execute: async () => {
         if (!cartVersion) throw new Error("Add a product to the cart before quoting");
         const result = await invokeAgentTool(
-          "ai_quote_cart",
+          "quote_cart",
           { cartVersion },
           { userid: input.userid }
         );
@@ -108,7 +112,7 @@ export async function runShoppingReAct(input: {
           throw new Error("Quote the cart before ordering");
         const quoteId = String((quote as { quote: { quoteId: string } }).quote.quoteId);
         const result = await invokeAgentTool(
-          "ai_submit_order",
+          "submit_order",
           { cartVersion, quoteId, idempotencyKey: randomUUID() },
           { userid: input.userid }
         );
@@ -138,6 +142,9 @@ export async function runShoppingReAct(input: {
     },
     { role: "user", content: input.query },
   ];
+  
+  // LLM.client is the retry-aware facade, so every ReAct model step gets the
+  // same transport retry handling as the one-shot intent parser.
   const result = await runReAct<ShoppingFinal>(llm.client, messages, tools, "final_answer", {
     maxSteps: 8,
   });
@@ -151,7 +158,7 @@ export async function confirmShoppingOrder(input: {
   idempotencyKey: string;
 }) {
   const result = await invokeAgentTool(
-    "ai_submit_order",
+    "submit_order",
     {
       cartVersion: input.cartVersion,
       quoteId: input.quoteId,

@@ -4,7 +4,7 @@ import { getDbPool } from "@/lib/db";
 import { deriveUserCartId } from "@/lib/cart-service/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
 import { lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
-import type { AiOrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
+import type { OrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
 
 export class OrderServiceError extends Error {
   constructor(public readonly code: string) {
@@ -329,7 +329,7 @@ export async function submitAiOrder(input: {
   cartVersion: number;
   quoteId: string;
   idempotencyKey: string;
-}): Promise<AiOrderToolOutput> {
+}): Promise<OrderToolOutput> {
   let cartId: string;
   try {
     cartId = deriveUserCartId(input.userid, "AI");
@@ -353,7 +353,7 @@ export async function submitAiOrder(input: {
       if (existing[0].response_json) {
         await connection.commit();
         const stored = existing[0].response_json;
-        return (typeof stored === "string" ? JSON.parse(stored) : stored) as AiOrderToolOutput;
+        return (typeof stored === "string" ? JSON.parse(stored) : stored) as OrderToolOutput;
       }
       const [groupRows] = await connection.query<RowDataPacket[]>(
         "SELECT order_group_id FROM order_groups WHERE order_group_id = ?",
@@ -436,7 +436,7 @@ export async function submitAiOrder(input: {
           toMinor(products.get(item.product_id)!.price),
         ]
       );
-    const response: AiOrderToolOutput = {
+    const response: OrderToolOutput = {
       orderGroupId,
       source: "AI",
       orders: [{ orderId }],

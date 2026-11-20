@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/auth-server";
-import { callAiSubmitOrderTool } from "@/lib/mcp/client";
+import { callAiSubmitOrderTool } from "@/lib/mcp/tool-calls";
 
 export const runtime = "nodejs";
 

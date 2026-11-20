@@ -40,17 +40,17 @@ export class OpenAIClient implements LLMClient {
             messages,
             tools: openaiTools,
             tool_choice: toolChoice,
+            ...(options?.temperature !== undefined && { temperature: options.temperature }),
         }
 
-        // DeepSeek 的 thinking 模式不支持 tool_choice：关闭思考并删除 tool_choice（默认仍会调用工具）
+        // 意图解析依赖指定工具返回结构化参数；关闭 DeepSeek thinking，但保留 tool_choice。
         if (/deepseek/i.test(this.config.model) || /deepseek/i.test(this.config.baseURL)) {
             requestBody.thinking = { type: 'disabled' }
-            delete requestBody.tool_choice
         }
 
         let response: Response
 		try {
-			response = await this.fetch(`${this.config.baseURL}/chat/completions`, {
+			response = await this.fetch(chatCompletionsURL(this.config.baseURL), {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -237,12 +237,15 @@ export class OpenAIClient implements LLMClient {
         } catch (error) {
             // AbortError 透传
 			if ((error as any)?.name === 'AbortError') throw error
-			throw new InvokeError(
+			const invokeError = new InvokeError(
 				InvokeErrorTypes.TOOL_EXECUTION_ERROR,
 				`Tool execution failed: ${(error as Error)?.message}`,
 				error,
 				data
 			)
+			// Only tools explicitly declared repeat-safe may re-run after execute throws.
+			if (tool.retryOnExecutionError !== true) invokeError.retryable = false
+			throw invokeError
         }
 
         return {
@@ -264,4 +267,11 @@ export class OpenAIClient implements LLMClient {
             toolCallId: normalizedChoice.message?.tool_calls?.[0]?.id,
         }
     }
+}
+
+function chatCompletionsURL(baseURL: string): string {
+    const normalized = baseURL.replace(/\/+$/, '')
+    return normalized.endsWith('/chat/completions')
+        ? normalized
+        : `${normalized}/chat/completions`
 }

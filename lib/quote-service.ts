@@ -4,7 +4,7 @@ import { deriveUserCartId } from "@/lib/cart-service/cart-session";
 import { getDbPool } from "@/lib/db";
 import { calculateBestQuote, lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCatalogProducts } from "@/lib/catalog";
-import type { AiQuoteToolOutput } from "@/lib/mcp/types";
+import type { QuoteToolOutput } from "@/lib/mcp/types";
 
 type CartRow = RowDataPacket & { cart_id: string; source: "WEB" | "AI"; cart_version: number; expires_at: Date | string | null };
 type CartItemRow = RowDataPacket & { sku_id: string; product_id: string; allocated_quantity: number; reserved_quantity: number | null; reservation_status: string | null; reservation_expires_at: Date | string | null };
@@ -25,7 +25,7 @@ function asDate(value: Date | string | null) {
 // 1. 按用户与来源推导购物车 ID，锁定购物车及其条目。
 // 2. 校验购物车来源、版本、有效期，以及每条目的库存预留状态。
 // 3. 汇总小计金额，计算最优报价规则，写入报价记录并返回结果。
-export async function quoteCart(input: { userid: string; cartVersion: number; expectedSource?: "WEB" | "AI" }): Promise<AiQuoteToolOutput> {
+export async function quoteCart(input: { userid: string; cartVersion: number; expectedSource?: "WEB" | "AI" }): Promise<QuoteToolOutput> {
   let cartId: string;
   try { cartId = deriveUserCartId(input.userid, input.expectedSource ?? "WEB"); } catch { throw new QuoteServiceError("CART_SESSION_UNAVAILABLE"); }
   const connection = await getDbPool().getConnection();

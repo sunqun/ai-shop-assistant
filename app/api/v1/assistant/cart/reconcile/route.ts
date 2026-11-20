@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { callAiReconcileCartTool } from "@/lib/mcp/client";
+import { callAiReconcileCartTool } from "@/lib/mcp/tool-calls";
 import { readSession } from "@/lib/auth/auth-server";
 
 export const runtime = "nodejs";

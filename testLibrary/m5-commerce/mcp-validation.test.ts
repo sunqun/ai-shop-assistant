@@ -4,7 +4,7 @@ import { callCommerceTool } from "@/lib/mcp/commerce-server";
 describe("commerce MCP validation", () => {
   it("rejects malformed reconcile arguments before service access", async () => {
     const result = await callCommerceTool({
-      name: "commerce.ai_reconcile_cart",
+      name: "commerce.reconcile_cart",
       arguments: { items: [{ id: "bad id", quantity: 1 }], idempotencyKey: "k" },
     }, { userid: "550e8400-e29b-41d4-a716-446655440000" });
     expect(result).toEqual({ ok: false, error: { code: "MCP_INVALID_ARGUMENTS", message: "AI 购物车参数无效。" } });
@@ -13,7 +13,7 @@ describe("commerce MCP validation", () => {
   it("rejects malformed order context and payload", async () => {
     const result = await callCommerceTool(
       {
-        name: "commerce.ai_submit_order",
+        name: "commerce.submit_order",
         arguments: { cartVersion: 1, quoteId: "not-a-uuid", idempotencyKey: "k" },
       },
       { userid: "not-a-uuid" },
@@ -24,7 +24,7 @@ describe("commerce MCP validation", () => {
   it("rejects malformed order payload after context validation", async () => {
     const result = await callCommerceTool(
       {
-        name: "commerce.ai_submit_order",
+        name: "commerce.submit_order",
         arguments: { cartVersion: 1, quoteId: "not-a-uuid", idempotencyKey: "k" },
       },
       { userid: "550e8400-e29b-41d4-a716-446655440000" },

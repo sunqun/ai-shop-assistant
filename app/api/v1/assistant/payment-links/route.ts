@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/auth-server";
 import { listPaymentLinks, PaymentLinkError } from "@/lib/payment-link/payment-link-service";
-import { callCreatePaymentLinkTool } from "@/lib/mcp/client";
+import { callCreatePaymentLinkTool } from "@/lib/mcp/tool-calls";
 
 export const runtime = "nodejs";
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeIntentSummary } from "@/lib/assistant-agent";
-import { parseProductSearchIntent } from "@/lib/assistant-agent/fallback-indent";
+import { makeIntentSummary } from "@/lib/intent";
+import { parseProductSearchIntent } from "@/lib/intent/fallback-indent";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -29,6 +29,7 @@ describe("assistant product search intent", () => {
     const responseBody = {
       choices: [
         {
+          finish_reason: "tool_calls",
           message: {
             tool_calls: [
               {

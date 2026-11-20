@@ -5,7 +5,7 @@ export const InvokeErrorTypes = {
 	SERVER_ERROR: 'server_error', // 5xx 服务端错误，重试
 	NO_TOOL_CALL: 'no_tool_call', // LLM 响应正常但没带 tool_calls（胡说八道），重试
 	INVALID_TOOL_ARGS: 'invalid_tool_args', // 带了 tool_calls 但参数 JSON 非法 / Zod 校验失败，重试
-	TOOL_EXECUTION_ERROR: 'tool_execution_error', // 工具 execute 里 throw（比如 DOM 元素找不到），重试
+	TOOL_EXECUTION_ERROR: 'tool_execution_error', // 工具执行失败；可能已产生业务副作用，不自动重试
 	INVALID_RESPONSE: 'invalid_response', // HTTP 响应 body 不是合法 JSON，重试
 	INVALID_SCHEMA: 'invalid_schema', // JSON 合法但缺少 choices / finish_reason 等字段，重试
 

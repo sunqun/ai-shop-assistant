@@ -1,16 +1,12 @@
+import { z } from "zod";
+import { createLLMFromEnv } from "@/lib/llm";
+import type { Message, Tool } from "@/lib/llm/type";
 import type { ProductSearchIntent } from "@/lib/catalog";
 import { fallbackIntent } from "./fallback-indent";
 
 // 意图解析层的全局上限：查询文本长度与单个意图字段的词数上限。
 const MAX_QUERY_LENGTH = 1000;
 const MAX_TERMS = 12;
-
-// 读取并校验必需环境变量，缺失时直接抛出，避免在请求中途才发现配置缺失。
-function requiredEnv(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`Missing required environment variable: ${name}`);
-  return value;
-}
 
 // 将任意输入收敛为 [min, max] 区间内的有限数值；非数值或非法值返回 undefined。
 function clampNumber(value: unknown, min: number, max: number): number | undefined {
@@ -73,47 +69,6 @@ function normalizeIntent(value: unknown): ProductSearchIntent {
   };
 }
 
-// 归一化模型端点：兼容配置里是否已带 /chat/completions 后缀，避免重复拼接。
-function baseUrl(): string {
-  return requiredEnv("MODEL_BASE_URL").replace(/\/$/, "").endsWith("/chat/completions")
-    ? requiredEnv("MODEL_BASE_URL").replace(/\/$/, "")
-    : `${requiredEnv("MODEL_BASE_URL").replace(/\/$/, "")}/chat/completions`;
-}
-
-// 供 LLM function calling 使用的工具声明：把意图解析强制收敛成结构化 JSON 输出。
-const INTENT_TOOL = {
-  type: "function",
-  function: {
-    name: "parse_product_search_intent",
-    description:
-      "解析用户商品搜索意图，输出结构化筛选条件；不回答用户问题、不推荐商品、不访问数据库。",
-    parameters: {
-      type: "object",
-      properties: {
-        keywords: { type: "array", items: { type: "string" } },
-        category: { type: ["string", "null"] },
-        brand: { type: ["string", "null"] },
-        minPrice: { type: ["number", "null"] },
-        maxPrice: { type: ["number", "null"] },
-        minRating: { type: ["number", "null"] },
-        inStockOnly: { type: "boolean" },
-        specTerms: { type: "array", items: { type: "string" } },
-        excludeTerms: { type: "array", items: { type: "string" } },
-        excludeBrands: { type: "array", items: { type: "string" } },
-        excludeCategories: { type: "array", items: { type: "string" } },
-      },
-      required: [
-        "keywords",
-        "inStockOnly",
-        "specTerms",
-        "excludeTerms",
-        "excludeBrands",
-        "excludeCategories",
-      ],
-    },
-  },
-};
-
 // 生成意图解析的 system prompt：约束模型只做理解与结构化，不回答、不推荐、不访问数据。
 function buildIntentSystemPrompt(): string {
   return [
@@ -151,20 +106,32 @@ function buildIntentSystemPrompt(): string {
   ].join("\n");
 }
 
-// 从 OpenAI 兼容响应里逐层取出首个 tool_call 的 arguments 字符串，结构缺失时返回 null。
-function extractToolArguments(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
-  const choices = (data as Record<string, unknown>).choices;
-  if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== "object") return null;
-  const message = (choices[0] as Record<string, unknown>).message;
-  if (!message || typeof message !== "object") return null;
-  const toolCalls = (message as Record<string, unknown>).tool_calls;
-  if (!Array.isArray(toolCalls) || !toolCalls[0] || typeof toolCalls[0] !== "object") return null;
-  const fn = (toolCalls[0] as Record<string, unknown>).function;
-  if (!fn || typeof fn !== "object") return null;
-  const args = (fn as Record<string, unknown>).arguments;
-  return typeof args === "string" ? args : null;
-}
+// 意图参数 schema：字段全部可选且带 catch 兜底，模型输出字段缺失或类型错误都不拦截，
+// 统一交给 normalizeIntent 做领域归一化；字段类型用于生成 function calling 的工具声明。
+const intentArgsSchema = z
+  .object({
+    keywords: z.array(z.string()).catch([]),
+    category: z.string().nullable().catch(null),
+    brand: z.string().nullable().catch(null),
+    minPrice: z.number().nullable().catch(null),
+    maxPrice: z.number().nullable().catch(null),
+    minRating: z.number().nullable().catch(null),
+    inStockOnly: z.boolean().catch(false),
+    specTerms: z.array(z.string()).catch([]),
+    excludeTerms: z.array(z.string()).catch([]),
+    excludeBrands: z.array(z.string()).catch([]),
+    excludeCategories: z.array(z.string()).catch([]),
+  })
+  .partial()
+  .passthrough();
+
+// 供 LLM function calling 使用的工具：把意图解析强制收敛成结构化筛选条件。
+const intentTool: Tool = {
+  description:
+    "解析用户商品搜索意图，输出结构化筛选条件；不回答用户问题、不推荐商品、不访问数据库。",
+  inputSchema: intentArgsSchema,
+  execute: async (args) => normalizeIntent(args),
+};
 
 // 搜索模式：model 表示由 LLM 解析，fallback 表示模型失败后由正则降级解析。
 export type ProductSearchMode = "model" | "fallback";
@@ -185,40 +152,26 @@ export async function parseProductSearchIntentWithMode(
     };
   }
 
+  const llm = createLLMFromEnv();
+
   // LLM 只负责把自然语言转换成结构化条件，不接触商品数据和内部推荐字段。
+  const messages: Message[] = [
+    { role: "system", content: buildIntentSystemPrompt() },
+    ...history.flatMap<Message>((turn) => [
+      { role: "user", content: turn.query },
+      { role: "assistant", content: turn.intentSummary },
+    ]),
+    { role: "user", content: normalizedQuery },
+  ];
+
   try {
-    const historyMessages = history.flatMap((turn) => [
-      { role: "user" as const, content: turn.query },
-      { role: "assistant" as const, content: turn.intentSummary },
-    ]);
-    const response = await fetch(baseUrl(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${requiredEnv("DEEPSEEK_API_KEY")}`,
-      },
-      body: JSON.stringify({
-        model: requiredEnv("MODEL"),
-        temperature: 0,
-        tools: [INTENT_TOOL],
-        tool_choice: { type: "function", function: { name: "parse_product_search_intent" } },
-        messages: [
-          { role: "system", content: buildIntentSystemPrompt() },
-          ...historyMessages,
-          { role: "user", content: normalizedQuery },
-        ],
-      }),
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error(`LLM request failed with status ${response.status}`);
-    const data: unknown = await response.json();
-    const argumentsText = extractToolArguments(data);
-    if (argumentsText === null) throw new Error("LLM response did not include a tool call");
-    console.log('---------------LLM response:', argumentsText);
-    return {
-      intent: normalizeIntent(JSON.parse(argumentsText)),
-      searchMode: "model",
-    };
+    const result = await llm.invoke(
+      messages,
+      { parse_product_search_intent: intentTool },
+      AbortSignal.timeout(12_000),
+      { toolChoiceName: "parse_product_search_intent", temperature: 0 }
+    );
+    return { intent: result.toolResult as ProductSearchIntent, searchMode: "model" };
   } catch (error) {
     // 模型暂不可用时仅允许短商品词降级检索，查询仍走真实目录数据库。
     console.error(

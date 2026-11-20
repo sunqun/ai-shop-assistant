@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { makeIntentSummary } from "@/lib/assistant-agent";
-import { searchProductsForAgent } from "@/lib/agent/orchestrator";
+import { makeIntentSummary } from "@/lib/intent";
+import { searchProductsForAgent } from "@/lib/agent/search-products-agent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

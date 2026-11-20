@@ -2,12 +2,12 @@ import { reconcileCart, CartServiceError } from "@/lib/cart-service/cart-service
 import { quoteCart, QuoteServiceError } from "@/lib/quote-service";
 import { submitAiOrder, OrderServiceError } from "@/lib/order-service";
 import type {
-  AiCartToolOutput,
-  AiOrderToolOutput,
-  AiQuoteToolOutput,
-  AiReconcileCartToolInput,
-  AiQuoteCartToolInput,
-  AiSubmitOrderToolInput,
+  CartToolOutput,
+  OrderToolOutput,
+  QuoteToolOutput,
+  ReconcileCartToolInput,
+  QuoteCartToolInput,
+  SubmitOrderToolInput,
   McpToolCall,
   McpToolResult,
 } from "@/lib/mcp/types";
@@ -22,7 +22,7 @@ function validKey(value: unknown): value is string {
 function validVersion(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 1;
 }
-function validItems(value: unknown): value is AiReconcileCartToolInput["items"] {
+function validItems(value: unknown): value is ReconcileCartToolInput["items"] {
   return (
     Array.isArray(value) &&
     value.length <= 100 &&
@@ -82,25 +82,25 @@ function errorResult(error: unknown): {
 
 export async function callCommerceTool(
   call:
-    | McpToolCall<"commerce.ai_reconcile_cart">
-    | McpToolCall<"commerce.ai_quote_cart">
-    | McpToolCall<"commerce.ai_submit_order">,
+    | McpToolCall<"commerce.reconcile_cart">
+    | McpToolCall<"commerce.quote_cart">
+    | McpToolCall<"commerce.submit_order">,
   context: CommerceToolContext = {}
-): Promise<McpToolResult<AiCartToolOutput | AiQuoteToolOutput | AiOrderToolOutput>> {
+): Promise<McpToolResult<CartToolOutput | QuoteToolOutput | OrderToolOutput>> {
   try {
     if (
       !call ||
       typeof call !== "object" ||
       ![
-        "commerce.ai_reconcile_cart",
-        "commerce.ai_quote_cart",
-        "commerce.ai_submit_order",
+        "commerce.reconcile_cart",
+        "commerce.quote_cart",
+        "commerce.submit_order",
       ].includes(call.name)
     ) {
       return { ok: false, error: { code: "MCP_TOOL_NOT_FOUND", message: "交易工具不存在。" } };
     }
-    if (call.name === "commerce.ai_reconcile_cart") {
-      const input = call.arguments as AiReconcileCartToolInput;
+    if (call.name === "commerce.reconcile_cart") {
+      const input = call.arguments as ReconcileCartToolInput;
       if (!validUserid(context.userid))
         return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再继续操作。" } };
       if (
@@ -118,8 +118,8 @@ export async function callCommerceTool(
         data: await reconcileCart({ ...input, userid: context.userid, source: "AI" }),
       };
     }
-    if (call.name === "commerce.ai_quote_cart") {
-      const input = call.arguments as AiQuoteCartToolInput;
+    if (call.name === "commerce.quote_cart") {
+      const input = call.arguments as QuoteCartToolInput;
       if (!validUserid(context.userid))
         return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再继续操作。" } };
       if (!input || !validVersion(input.cartVersion)) {
@@ -133,7 +133,7 @@ export async function callCommerceTool(
         data: await quoteCart({ ...input, userid: context.userid, expectedSource: "AI" }),
       };
     }
-    const input = call.arguments as AiSubmitOrderToolInput;
+    const input = call.arguments as SubmitOrderToolInput;
     if (!validUserid(context.userid))
       return { ok: false, error: { code: "UNAUTHENTICATED", message: "请先登录后再提交订单。" } };
     if (
