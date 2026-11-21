@@ -1,4 +1,5 @@
-import { callCatalogTool } from "@/lib/mcp/catalog-server";
+import { callCatalogTool, callProductReviewsTool } from "@/lib/mcp/catalog-server";
+import type { ProductReviewsToolInput, ProductReviewsToolOutput } from "./types";
 import { callCommerceTool, type CommerceToolContext } from "@/lib/mcp/commerce-server";
 import { callPaymentLinkTool } from "@/lib/mcp/payment-link-server";
 import type {
@@ -24,6 +25,12 @@ export async function callCatalogSearchTool(
   input: CatalogSearchToolInput
 ): Promise<McpToolResult<CatalogSearchToolOutput>> {
   return callCatalogTool({ name: "catalog.search_products", arguments: input });
+}
+
+export async function callReadProductReviewsTool(
+  input: ProductReviewsToolInput
+): Promise<McpToolResult<ProductReviewsToolOutput>> {
+  return callProductReviewsTool({ name: "catalog.read_product_reviews", arguments: input });
 }
 
 // AI 合并购物车：携带用户上下文，把冲突/多来源的购物车项合并为一致状态。
@@ -52,10 +59,9 @@ export async function callAiSubmitOrderTool(
   input: SubmitOrderToolInput,
   context: CommerceToolContext
 ): Promise<McpToolResult<OrderToolOutput>> {
-  return callCommerceTool(
-    { name: "commerce.submit_order", arguments: input },
-    context
-  ) as Promise<McpToolResult<OrderToolOutput>>;
+  return callCommerceTool({ name: "commerce.submit_order", arguments: input }, context) as Promise<
+    McpToolResult<OrderToolOutput>
+  >;
 }
 
 // 创建支付短链：为指定商品 + 数量生成可跳转的支付入口。

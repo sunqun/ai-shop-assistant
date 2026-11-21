@@ -3,7 +3,8 @@ import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/prom
 import { getDbPool } from "@/lib/repository/db";
 import { deriveUserCartId } from "@/lib/repository/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
-import { lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
+import { calculateBestQuote, lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
+import { promotionAAvailable, isAutoShoppingTask } from "./promotion-eligibility";
 import type { OrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
 
 export class OrderServiceError extends Error {
@@ -26,6 +27,12 @@ type QuoteRow = RowDataPacket & {
   total_minor: number;
   expires_at: Date | string;
   consumed_at: Date | string | null;
+  selected_sku_ids?: string[] | string | null;
+  promotion: string;
+  rule_version: string;
+  discount_minor: number;
+  shipping_minor: number;
+  shopping_task_id: string | null;
 };
 type ItemRow = RowDataPacket & {
   sku_id: string;
@@ -44,6 +51,7 @@ type ReservationRow = RowDataPacket & {
 type OrderListRow = RowDataPacket & {
   order_group_id: string;
   source: "WEB" | "AI";
+  submission_mode: "manual" | "auto";
   created_at: Date | string;
   subtotal_minor: number | string;
   discount_minor: number | string;
@@ -59,6 +67,8 @@ type OrderListRow = RowDataPacket & {
 export type UserOrderView = {
   orderGroupId: string;
   source: "WEB" | "AI";
+  // source保留购物车/计价来源；只有自动购物任务才属于自动提交。
+  submissionMode: "manual" | "auto";
   createdAt: string;
   subtotalMinor: number;
   discountMinor: number;
@@ -69,6 +79,27 @@ export type UserOrderView = {
 
 function dateValue(value: Date | string) {
   return value instanceof Date ? value : new Date(value);
+}
+
+async function assertQuotePromotions(
+  connection: PoolConnection, userid: string, quote: QuoteRow,
+  source: "WEB" | "AI", idempotencyKey: string
+) {
+  // 任务报价不能转用于其他提交入口；资格始终从服务端任务读取。
+  if (quote.shopping_task_id && idempotencyKey !== `shopping:${quote.shopping_task_id}:order`)
+    throw new OrderServiceError("QUOTE_EXPIRED");
+  const eligibleC = source === "AI" && await isAutoShoppingTask(connection, userid, quote.shopping_task_id);
+  const current = calculateBestQuote({
+    subtotalMinor: Number(quote.subtotal_minor), source,
+    aiSubtotalMinor: source === "AI" ? Number(quote.subtotal_minor) : 0,
+    promotionAAvailable: await promotionAAvailable(connection, userid),
+    aiOrderEligible: eligibleC,
+  });
+  if (quote.rule_version !== current.ruleVersion || quote.promotion !== current.selected.id ||
+      Number(quote.discount_minor) !== current.selected.discountMinor ||
+      Number(quote.shipping_minor) !== current.selected.shippingMinor ||
+      Number(quote.total_minor) !== current.selected.totalMinor)
+    throw new OrderServiceError("QUOTE_EXPIRED");
 }
 
 async function consumeReservedInventory(
@@ -134,14 +165,18 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
   const pool = getDbPool();
   const [rows] = await pool.query<OrderListRow[]>(
     `SELECT og.order_group_id, og.source, og.created_at,
+            CASE WHEN og.source = 'AI' AND EXISTS (
+              SELECT 1 FROM shopping_tasks st
+               WHERE st.userid = og.userid AND st.mode = 'auto'
+                 AND og.idempotency_key = CONCAT('shopping:', st.task_id, ':order')
+            ) THEN 'auto' ELSE 'manual' END AS submission_mode,
             q.subtotal_minor, q.discount_minor, q.shipping_minor, q.total_minor,
-            o.order_id, oi.sku_id, oi.quantity, oi.unit_price_minor, p.name AS product_name
+            o.order_id, oi.sku_id, oi.quantity, oi.unit_price_minor,
+            oi.product_name_snapshot AS product_name
        FROM order_groups og
        INNER JOIN cart_quotes q ON q.quote_id = og.quote_id
        INNER JOIN orders o ON o.order_group_id = og.order_group_id
        INNER JOIN order_items oi ON oi.order_id = o.order_id
-       LEFT JOIN inventory_skus s ON s.sku_id = oi.sku_id
-       LEFT JOIN products p ON p.product_id = s.product_id
       WHERE og.userid = ? ${orderGroupId ? "AND og.order_group_id = ?" : ""}
       ORDER BY og.created_at DESC, og.order_group_id DESC, oi.sku_id ASC`,
     orderGroupId ? [userid, orderGroupId] : [userid]
@@ -154,6 +189,7 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
       group = {
         orderGroupId: id,
         source: row.source,
+        submissionMode: row.submission_mode === "auto" ? "auto" : "manual",
         createdAt: dateValue(row.created_at).toISOString(),
         subtotalMinor: Number(row.subtotal_minor),
         discountMinor: Number(row.discount_minor),
@@ -165,7 +201,7 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
     }
     group.items.push({
       skuId: String(row.sku_id),
-      productName: row.product_name ?? String(row.sku_id),
+      productName: row.product_name ?? `[历史商品名称未记录] ${String(row.sku_id)}`,
       quantity: Number(row.quantity),
       unitPriceMinor: Number(row.unit_price_minor),
     });
@@ -244,7 +280,7 @@ export async function submitWebOrder(input: {
     if (!cart.expires_at || dateValue(cart.expires_at).getTime() <= Date.now())
       throw new OrderServiceError("CART_RESERVATION_EXPIRED");
     const [quoteRows] = await connection.query<QuoteRow[]>(
-      "SELECT quote_id, cart_id, cart_version, subtotal_minor, total_minor, expires_at, consumed_at FROM cart_quotes WHERE quote_id = ? AND cart_id = ? FOR UPDATE",
+      "SELECT quote_id, cart_id, cart_version, subtotal_minor, total_minor, expires_at, consumed_at, selected_sku_ids, promotion, rule_version, discount_minor, shipping_minor, shopping_task_id FROM cart_quotes WHERE quote_id = ? AND cart_id = ? FOR UPDATE",
       [input.quoteId, cartId]
     );
     const quote = quoteRows[0];
@@ -255,10 +291,18 @@ export async function submitWebOrder(input: {
     )
       throw new OrderServiceError("QUOTE_EXPIRED");
     if (quote.consumed_at) throw new OrderServiceError("QUOTE_ALREADY_USED");
-    const [itemRows] = await connection.query<ItemRow[]>(
+    const [availableRows] = await connection.query<ItemRow[]>(
       "SELECT ci.sku_id, ci.allocated_quantity, ci.unavailable_quantity, s.product_id FROM cart_items ci INNER JOIN inventory_skus s ON s.sku_id = ci.sku_id WHERE ci.cart_id = ? AND ci.allocated_quantity > 0 ORDER BY ci.sku_id FOR UPDATE",
       [cartId]
     );
+    const selected: unknown = typeof quote.selected_sku_ids === "string"
+      ? JSON.parse(quote.selected_sku_ids) : quote.selected_sku_ids;
+    if (selected != null && (!Array.isArray(selected) || !selected.length ||
+        selected.some((sku) => typeof sku !== "string") || new Set(selected).size !== selected.length))
+      throw new OrderServiceError("QUOTE_EXPIRED");
+    const selection = selected == null ? null : new Set(selected as string[]);
+    const itemRows = selection ? availableRows.filter((item) => selection.has(item.sku_id)) : availableRows;
+    if (selection && itemRows.length !== selection.size) throw new OrderServiceError("QUOTE_EXPIRED");
     if (!itemRows.length) throw new OrderServiceError("OUT_OF_STOCK");
     const products = await getCatalogProducts(itemRows.map((item) => item.product_id));
     for (const item of itemRows)
@@ -271,6 +315,7 @@ export async function submitWebOrder(input: {
     );
     if (currentSubtotalMinor !== Number(quote.subtotal_minor))
       throw new OrderServiceError("QUOTE_EXPIRED");
+    await assertQuotePromotions(connection, input.userid, quote, "WEB", input.idempotencyKey);
     await consumeReservedInventory(connection, cartId, itemRows, input.idempotencyKey);
     const orderGroupId = randomUUID();
     const orderId = randomUUID();
@@ -284,12 +329,13 @@ export async function submitWebOrder(input: {
     ]);
     for (const item of itemRows)
       await connection.execute(
-        "INSERT INTO order_items (order_id, sku_id, quantity, unit_price_minor) VALUES (?, ?, ?, ?)",
+        "INSERT INTO order_items (order_id, sku_id, quantity, unit_price_minor, product_name_snapshot) VALUES (?, ?, ?, ?, ?)",
         [
           orderId,
           item.sku_id,
           item.allocated_quantity,
           toMinor(products.get(item.product_id)!.price),
+          products.get(item.product_id)!.name,
         ]
       );
     const response: WebOrderToolOutput = {
@@ -314,6 +360,9 @@ export async function submitWebOrder(input: {
         JSON.stringify({ userId: input.userid, cartId, quoteId: input.quoteId, source: "WEB" }),
       ]
     );
+    // 仅移除已购买条目；未勾选商品及其库存预留继续保留。
+    await connection.execute(`DELETE FROM cart_items WHERE cart_id = ? AND sku_id IN (${itemRows.map(() => "?").join(",")})`, [cartId, ...itemRows.map((item) => item.sku_id)]);
+    await connection.execute("UPDATE carts SET cart_version = cart_version + 1, updated_at = CURRENT_TIMESTAMP WHERE cart_id = ?", [cartId]);
     await connection.commit();
     return response;
   } catch (error) {
@@ -388,7 +437,7 @@ export async function submitAiOrder(input: {
     if (!cart.expires_at || dateValue(cart.expires_at).getTime() <= Date.now())
       throw new OrderServiceError("CART_RESERVATION_EXPIRED");
     const [quoteRows] = await connection.query<QuoteRow[]>(
-      "SELECT quote_id, cart_id, cart_version, subtotal_minor, total_minor, expires_at, consumed_at FROM cart_quotes WHERE quote_id = ? AND cart_id = ? FOR UPDATE",
+      "SELECT quote_id, cart_id, cart_version, subtotal_minor, total_minor, expires_at, consumed_at, promotion, rule_version, discount_minor, shipping_minor, shopping_task_id FROM cart_quotes WHERE quote_id = ? AND cart_id = ? FOR UPDATE",
       [input.quoteId, cartId]
     );
     const quote = quoteRows[0];
@@ -415,6 +464,7 @@ export async function submitAiOrder(input: {
     );
     if (currentSubtotalMinor !== Number(quote.subtotal_minor))
       throw new OrderServiceError("QUOTE_EXPIRED");
+    await assertQuotePromotions(connection, input.userid, quote, "AI", input.idempotencyKey);
     await consumeReservedInventory(connection, cartId, itemRows, input.idempotencyKey);
     const orderGroupId = randomUUID();
     const orderId = randomUUID();
@@ -428,12 +478,13 @@ export async function submitAiOrder(input: {
     ]);
     for (const item of itemRows)
       await connection.execute(
-        "INSERT INTO order_items (order_id, sku_id, quantity, unit_price_minor) VALUES (?, ?, ?, ?)",
+        "INSERT INTO order_items (order_id, sku_id, quantity, unit_price_minor, product_name_snapshot) VALUES (?, ?, ?, ?, ?)",
         [
           orderId,
           item.sku_id,
           item.allocated_quantity,
           toMinor(products.get(item.product_id)!.price),
+          products.get(item.product_id)!.name,
         ]
       );
     const response: OrderToolOutput = {

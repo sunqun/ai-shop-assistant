@@ -1,6 +1,6 @@
 -- ============================================================
 -- DDL（最终表结构）
--- 由 db/migrations/ 下 12 个迁移合并而来，已按外键依赖重排。
+-- 由 db/migrations/ 下 14 个迁移合并而来，已按外键依赖重排。
 -- 执行顺序：先执行本文件，再执行 dml.sql。
 -- 所有 ALTER（加列/删列/改枚举）已内联到最终建表语句中。
 -- ============================================================
@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS cart_quotes (
   quote_id CHAR(36) NOT NULL PRIMARY KEY,
   cart_id CHAR(64) NOT NULL,
   cart_version BIGINT UNSIGNED NOT NULL,
+  selected_sku_ids JSON NULL,
+  shopping_task_id CHAR(36) NULL,
   promotion VARCHAR(32) NOT NULL,
   rule_version VARCHAR(64) NOT NULL,
   subtotal_minor BIGINT UNSIGNED NOT NULL,
@@ -178,6 +180,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_items (
   order_id CHAR(36) NOT NULL,
   sku_id VARCHAR(100) NOT NULL,
+  product_name_snapshot VARCHAR(191) NULL,
   quantity INT UNSIGNED NOT NULL,
   unit_price_minor BIGINT UNSIGNED NOT NULL,
   PRIMARY KEY (order_id, sku_id),

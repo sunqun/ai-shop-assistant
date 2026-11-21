@@ -17,8 +17,8 @@ export function OrderCard({
     <article className="order">
       <header className="order__head">
         <div className="order__source">
-          <span className={`order__badge${order.source === "AI" ? " order__badge--ai" : ""}`}>
-            {order.source === "AI" ? "AI 下单" : "网站下单"}
+          <span className={`order__badge${order.submissionMode === "auto" ? " order__badge--ai" : ""}`}>
+            {order.submissionMode === "auto" ? "AI 下单" : "手动下单"}
           </span>
           <span className="order__id">{order.orderGroupId}</span>
         </div>

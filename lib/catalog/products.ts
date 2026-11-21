@@ -1,7 +1,22 @@
 import type { RowDataPacket } from "mysql2/promise";
-import { getDbPool } from "@/lib/db";
-import type { CatalogProduct, ProductListFilter, ProductSearchIntent, ProductSearchPage } from "./types";
-import { likeTerm, mapProduct, PRODUCT_GROUP, PRODUCT_SELECT, type ProductRow } from "./shared";
+import { getDbPool } from "@/lib/repository/db";
+import type {
+  CatalogProduct,
+  ProductListFilter,
+  ProductSearchIntent,
+  ProductSearchPage,
+} from "./types";
+import {
+  internalRankExpr,
+  likeTerm,
+  mapProduct,
+  PRODUCT_GROUP,
+  PRODUCT_SELECT,
+  type ProductRow,
+} from "./shared";
+import { normalizeSearchConstraints } from "@/lib/intent/search-constraints";
+import { describeSearchClarification, matchesNumericConstraint } from "./spec-matching";
+import { assessCatalogConditions, type AssessedProduct } from "./condition-assessment";
 
 // 商品搜索别名表的一行：alias 为可检索别名，canonical_term 为标准化词。
 type ProductSearchAliasRow = RowDataPacket & {
@@ -52,14 +67,23 @@ function buildExcludeClause(intent: ProductSearchIntent, params: Array<string | 
   return clauses.length ? `NOT (${clauses.join(" OR ")})` : "";
 }
 
-function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): { sql: string; params: Array<string | number> } {
+function buildIntentWhere(
+  intent: ProductSearchIntent,
+  termGroups: string[][]
+): { sql: string; params: Array<string | number> } {
   // 所有条件都通过参数绑定传入，避免把模型返回的文本拼进 SQL。
   const clauses: string[] = [];
   const params: Array<string | number> = [];
+  if (intent.productIds?.length) {
+    clauses.push(`p.product_id IN (${intent.productIds.map(() => "?").join(", ")})`);
+    params.push(...intent.productIds);
+  }
   for (const variants of termGroups) {
     const variantClauses: string[] = [];
     for (const term of variants) {
-      variantClauses.push("(p.name LIKE ? OR p.brand LIKE ? OR c.name LIKE ? OR p.description LIKE ? OR CAST(p.specs AS CHAR) LIKE ?)");
+      variantClauses.push(
+        "(p.name LIKE ? OR p.brand LIKE ? OR c.name LIKE ? OR p.description LIKE ? OR CAST(p.specs AS CHAR) LIKE ?)"
+      );
       const value = likeTerm(term);
       params.push(value, value, value, value, value);
     }
@@ -78,7 +102,9 @@ function buildIntentWhere(intent: ProductSearchIntent, termGroups: string[][]): 
     params.push(intent.maxPrice);
   }
   if (intent.minRating !== undefined) {
-    clauses.push("COALESCE((SELECT AVG(rating) FROM product_reviews rr WHERE rr.product_id = p.product_id), 0) >= ?");
+    clauses.push(
+      "COALESCE((SELECT AVG(rating) FROM product_reviews rr WHERE rr.product_id = p.product_id), 0) >= ?"
+    );
     params.push(intent.minRating);
   }
   if (intent.inStockOnly) clauses.push("COALESCE(inv.on_hand - inv.reserved, 0) > 0");
@@ -128,46 +154,109 @@ export async function searchCatalogProducts(
   pageSize: number,
   cursor?: string
 ): Promise<ProductSearchPage> {
+  intent = normalizeSearchConstraints(intent);
   // category 降级并入检索词，避免把「咖啡」当成 categories.name 去精确过滤。
   const searchTerms = tokenizeTerms([
     ...intent.keywords,
     ...(intent.category ? [intent.category] : []),
-    ...intent.specTerms,
   ]);
   const termGroups = await expandSearchTermGroups(searchTerms);
   const { sql, params } = buildIntentWhere(intent, termGroups);
-  const decoded = decodeCursor(cursor);
+  let decoded = decodeCursor(cursor);
   // 游标只保存商品 ID；排序分数始终在服务端计算，不能由客户端指定或读取。
-  const havingSql = decoded
-    ? "HAVING (internal_rank < (SELECT p2.recommendation_score * CASE WHEN p2.margin_rate >= 0.30 THEN 1.5 ELSE 1 END FROM products p2 WHERE p2.product_id = ?) OR (internal_rank = (SELECT p2.recommendation_score * CASE WHEN p2.margin_rate >= 0.30 THEN 1.5 ELSE 1 END FROM products p2 WHERE p2.product_id = ?) AND p.product_id > ?))"
-    : "";
-  if (decoded) params.push(decoded.productId, decoded.productId, decoded.productId);
-  const [rows] = await getDbPool().query<ProductRow[]>(
-    `${PRODUCT_SELECT} ${sql} ${PRODUCT_GROUP} ${havingSql} ORDER BY internal_rank DESC, p.product_id ASC LIMIT ?`,
-    [...params, pageSize + 1]
+  const structured = !!(intent.numericConstraints?.length || intent.requiredConditions?.length);
+  const batchSize = structured ? Math.max(100, pageSize + 1) : pageSize + 1;
+  const matches: AssessedProduct[] = [];
+  // 规格过滤后继续按游标扫描，避免第一页不合适就误报无结果；保持目录原有排序。
+  while (matches.length <= pageSize) {
+    const cursorRank = internalRankExpr("p2");
+    const havingSql = decoded
+      ? `HAVING (internal_rank < (SELECT ${cursorRank} FROM products p2 WHERE p2.product_id = ?) OR (internal_rank = (SELECT ${cursorRank} FROM products p2 WHERE p2.product_id = ?) AND p.product_id > ?))`
+      : "";
+    const cursorParams = decoded ? [decoded.productId, decoded.productId, decoded.productId] : [];
+    const [rows] = await getDbPool().query<ProductRow[]>(
+      `${PRODUCT_SELECT} ${sql} ${PRODUCT_GROUP} ${havingSql} ORDER BY internal_rank DESC, p.product_id ASC LIMIT ?`,
+      [...params, ...cursorParams, batchSize]
+    );
+    const numericMatches = rows
+      .map(mapProduct)
+      .filter((product) =>
+        (intent.numericConstraints ?? []).every((constraint) =>
+          matchesNumericConstraint(product, constraint)
+        )
+      );
+    const assessed = await assessCatalogConditions(numericMatches, intent);
+    for (const match of assessed) {
+      matches.push(match);
+      if (matches.length > pageSize) break;
+    }
+    if (matches.length > pageSize || rows.length < batchSize) break;
+    decoded = { productId: rows[rows.length - 1].product_id };
+  }
+  const hasMore = matches.length > pageSize;
+  const pageMatches = matches.slice(0, pageSize);
+  const products = pageMatches.map((match) => match.product);
+  const last = products.at(-1);
+  const candidate = pageMatches.find((match) => match.product.stock > 0);
+  let clarification = describeSearchClarification(
+    candidate?.product,
+    intent,
+    candidate?.unresolved ?? []
   );
-  const hasMore = rows.length > pageSize;
-  const pageRows = hasMore ? rows.slice(0, pageSize) : rows;
-  const last = pageRows.at(-1);
+  if (clarification && candidate?.pendingSlot)
+    clarification = `${clarification} ${candidate.pendingSlot.question}`;
+  if (
+    clarification &&
+    !candidate?.unresolvedRequired?.length &&
+    !intent.unresolvedConditions?.length
+  )
+    clarification += " 如果接受这款商品的现有规格，可回复“就它吧”。";
   return {
-    products: pageRows.map(mapProduct),
-    nextCursor: hasMore && last ? encodeCursor(last.product_id) : null,
+    products,
+    nextCursor: hasMore && last ? encodeCursor(last.id) : null,
+    ...(clarification ? { clarification } : {}),
+    ...(candidate
+      ? {
+          clarificationContext: {
+            unresolvedRequired: candidate.unresolvedRequired ?? candidate.unresolved,
+            unresolvedPreferences: candidate.unresolvedPreferences ?? [],
+            ...(candidate.pendingSlot ? { pendingSlot: candidate.pendingSlot } : {}),
+          },
+        }
+      : {}),
   };
 }
 
 // 返回前 100 件商品（空意图、不限条件），供目录页/默认列表使用。
 export async function listCatalogProducts(): Promise<CatalogProduct[]> {
   const page = await searchCatalogProducts(
-    { keywords: [], specTerms: [], inStockOnly: false },
+    { keywords: [], inStockOnly: false },
     100
   );
   return page.products;
 }
 
-// 获取商品列表-搜索
-export async function listProducts(filter: ProductListFilter = {}): Promise<CatalogProduct[]> {
+export class ProductPageError extends Error {}
+
+// 桌面列表采用稳定keyset分页；游标绑定当前筛选和排序且不包含内部推荐分。
+export async function listProductPage(
+  filter: ProductListFilter = {}, pageSize = 20, cursor?: string
+): Promise<{ products: CatalogProduct[]; nextCursor: string | null }> {
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
+    throw new ProductPageError("INVALID_PAGE_SIZE");
+  const scope = { categoryId: filter.categoryId ?? "", keyword: filter.keyword?.trim() ?? "", sort: filter.sort ?? "recommended" };
+  let afterId: string | undefined;
+  if (cursor) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+      if (decoded.kind !== "storefront" || typeof decoded.productId !== "string" ||
+          !/^[A-Za-z0-9._-]{1,100}$/u.test(decoded.productId) || JSON.stringify(decoded.scope) !== JSON.stringify(scope))
+        throw new Error("scope");
+      afterId = decoded.productId;
+    } catch { throw new ProductPageError("INVALID_PRODUCT_CURSOR"); }
+  }
   const clauses: string[] = [];
-  const params: string[] = [];
+  const params: Array<string | number> = [];
   if (filter.categoryId) {
     clauses.push("p.category_id = ?");
     params.push(filter.categoryId);
@@ -177,11 +266,27 @@ export async function listProducts(filter: ProductListFilter = {}): Promise<Cata
     params.push(likeTerm(filter.keyword.trim()));
   }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const order = scope.sort === "price-low" ? { value: "p.price", anchor: "(SELECT p2.price FROM products p2 WHERE p2.product_id = ?)", direction: "ASC", compare: ">" }
+    : scope.sort === "price-high" ? { value: "p.price", anchor: "(SELECT p2.price FROM products p2 WHERE p2.product_id = ?)", direction: "DESC", compare: "<" }
+    : scope.sort === "rating" ? { value: "COALESCE(ROUND(AVG(r.rating), 1), 0)", anchor: "(SELECT COALESCE(ROUND(AVG(r2.rating), 1), 0) FROM product_reviews r2 WHERE r2.product_id = ?)", direction: "DESC", compare: "<" }
+    : { value: "internal_rank", anchor: `(SELECT ${internalRankExpr("p2")} FROM products p2 WHERE p2.product_id = ?)`, direction: "DESC", compare: "<" };
+  const having = afterId ? `HAVING (${order.value} ${order.compare} ${order.anchor} OR (${order.value} = ${order.anchor} AND p.product_id > ?))` : "";
+  if (afterId) params.push(afterId, afterId, afterId);
   const [rows] = await getDbPool().query<ProductRow[]>(
-    `${PRODUCT_SELECT} ${where} ${PRODUCT_GROUP} ORDER BY internal_rank DESC, p.product_id ASC LIMIT 100`,
-    params
+    `${PRODUCT_SELECT} ${where} ${PRODUCT_GROUP} ${having} ORDER BY ${order.value} ${order.direction}, p.product_id ASC LIMIT ?`,
+    [...params, pageSize + 1]
   );
-  return rows.map(mapProduct);
+  const visible = rows.slice(0, pageSize);
+  return {
+    products: visible.map(mapProduct),
+    nextCursor: rows.length > pageSize && visible.length
+      ? Buffer.from(JSON.stringify({ kind: "storefront", productId: visible[visible.length - 1].product_id, scope })).toString("base64url") : null,
+  };
+}
+
+// 旧的内部调用可继续读取首批；网页必须消费listProductPage的nextCursor。
+export async function listProducts(filter: ProductListFilter = {}): Promise<CatalogProduct[]> {
+  return (await listProductPage(filter, 100)).products;
 }
 
 // 按商品 ID 查询单个商品，不存在时返回 null。
@@ -194,7 +299,9 @@ export async function getCatalogProduct(productId: string): Promise<CatalogProdu
 }
 
 // 批量查询商品，返回 productId → 商品的 Map；去重后一次查询，避免循环打库。
-export async function getCatalogProducts(productIds: string[]): Promise<Map<string, CatalogProduct>> {
+export async function getCatalogProducts(
+  productIds: string[]
+): Promise<Map<string, CatalogProduct>> {
   const ids = [...new Set(productIds)];
   if (!ids.length) return new Map();
   const [rows] = await getDbPool().query<ProductRow[]>(

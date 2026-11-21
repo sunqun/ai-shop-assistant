@@ -6,6 +6,9 @@ export function getProductsRequest(params: GetProductsParams = {}): Promise<Requ
   const search = new URLSearchParams();
   if (params.categoryId) search.set("categoryId", params.categoryId);
   if (params.keyword) search.set("keyword", params.keyword);
+  if (params.sort) search.set("sort", params.sort);
+  if (params.pageSize) search.set("pageSize", String(params.pageSize));
+  if (params.cursor) search.set("cursor", params.cursor);
   const qs = search.toString();
   return request<ProductsResponse>(`/api/v1/products${qs ? `?${qs}` : ""}`);
 }

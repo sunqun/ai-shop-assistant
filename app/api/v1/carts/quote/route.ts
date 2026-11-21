@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 
 type QuoteRequest = {
   cartVersion?: unknown;
+  selectedSkuIds?: unknown;
 };
 
 function errorResponse(status: number, code: string, message: string) {
@@ -30,8 +31,13 @@ export async function POST(request: Request) {
   if (!Number.isSafeInteger(body.cartVersion) || (body.cartVersion as number) < 1) {
     return errorResponse(400, "INVALID_QUOTE_REQUEST", "购物车版本不能为空。");
   }
+  if (body.selectedSkuIds !== undefined && (!Array.isArray(body.selectedSkuIds) ||
+      body.selectedSkuIds.length === 0 || body.selectedSkuIds.length > 1000 ||
+      body.selectedSkuIds.some((sku) => typeof sku !== "string" || !sku.length || sku.length > 100) ||
+      new Set(body.selectedSkuIds).size !== body.selectedSkuIds.length))
+    return errorResponse(400, "INVALID_CART_SELECTION", "请勾选有效的购物车商品。");
   try {
-    return NextResponse.json(await quoteCart({ userid: session.userid, cartVersion: body.cartVersion as number, expectedSource: "WEB" }));
+    return NextResponse.json(await quoteCart({ userid: session.userid, cartVersion: body.cartVersion as number, expectedSource: "WEB", selectedSkuIds: body.selectedSkuIds as string[] | undefined }));
   } catch (error) {
     if (error instanceof QuoteServiceError) {
       const status = error.code === "CART_NOT_FOUND" ? 404 : ["CART_CHANGED", "CART_RESERVATION_EXPIRED", "OUT_OF_STOCK"].includes(error.code) ? 409 : error.code === "PRICING_CATALOG_UNAVAILABLE" ? 503 : 400;

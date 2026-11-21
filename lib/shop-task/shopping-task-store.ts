@@ -12,6 +12,7 @@
 import { randomUUID } from "node:crypto";
 import type { RowDataPacket } from "mysql2/promise";
 import { getDbPool } from "@/lib/repository/db";
+import { REVIEW_LEASE_MS } from "@/lib/reviews/types";
 import {
   CANCELLABLE_PHASES,
   TERMINAL_PHASES,
@@ -73,10 +74,17 @@ function fromRow(row: RowDataPacket): TaskRecord {
 
 // 将领域对象 TaskRecord 转换为返回给前端的 ShoppingTask 视图，
 // 并基于当前 phase / operationToken / 是否过期计算前端可执行的操作能力位。
+// 常情况下按阶段推进；卡死了也能推进恢复；但如果正因「看评论」暂缓自动下单，就按住不让走
 export function taskView(task: TaskRecord): ShoppingTask {
   const stale = isOperationStale(task);
+  const { reviewProgress, ...publicData } = task.data;
+  const reviewBusy = !!(
+    reviewProgress?.operationToken &&
+    reviewProgress.operationStartedAt &&
+    Date.now() - Date.parse(reviewProgress.operationStartedAt) < REVIEW_LEASE_MS
+  );
   return {
-    ...task.data,
+    ...publicData,
     taskId: task.taskId,
     query: task.query,
     mode: task.mode,
@@ -86,11 +94,17 @@ export function taskView(task: TaskRecord): ShoppingTask {
     canCancel: CANCELLABLE_PHASES.includes(task.phase),
     canConfirm: task.phase === "awaiting_confirmation" && !task.operationToken,
     canAdvance:
-      (!task.operationToken &&
+      !(task.data.reviewHold && task.mode === "auto" && task.phase === "ready_to_order") &&
+      ((!task.operationToken &&
         ["queued", "ready_to_order", "cancel_pending"].includes(task.phase)) ||
-      (stale && !["committing", "reconciling_result"].includes(task.phase)),
+        (stale && !["committing", "reconciling_result"].includes(task.phase))),
     canRecover: task.phase === "reconciling_result" || (task.phase === "committing" && stale),
     terminal: TERMINAL_PHASES.includes(task.phase),
+    canResumeAfterReviews:
+      !!task.data.reviewHold &&
+      task.mode === "auto" &&
+      CANCELLABLE_PHASES.includes(task.phase) &&
+      !reviewBusy,
   };
 }
 
@@ -172,13 +186,22 @@ export async function createTask(input: {
   query: string;
   mode: ShoppingMode;
   idempotencyKey: string;
+  data?: ShoppingTaskData;
 }): Promise<TaskRecord> {
   const pool = getDbPool();
   try {
     await pool.execute(
       `INSERT INTO shopping_tasks (task_id, userid, request_key, mode, query_text, data_json, active_user)
-       VALUES (?, ?, ?, ?, ?, '{}', ?)`,
-      [randomUUID(), input.userid, input.idempotencyKey, input.mode, input.query, input.userid]
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        randomUUID(),
+        input.userid,
+        input.idempotencyKey,
+        input.mode,
+        input.query,
+        JSON.stringify(input.data ?? {}),
+        input.userid,
+      ]
     );
   } catch (error) {
     // request_key 唯一冲突时忽略，走下方按 request_key 读取已存在任务的幂等路径。

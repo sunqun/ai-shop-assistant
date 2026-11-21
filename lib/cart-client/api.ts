@@ -29,11 +29,11 @@ export async function reconcileCartRequest(items: CartItemInput[]): Promise<Requ
 }
 
 /** 获取购物车报价 */
-export async function quoteCartRequest(cartVersion: number): Promise<RequestResult<{ quote: CartQuote }>> {
+export async function quoteCartRequest(cartVersion: number, selectedSkuIds?: string[]): Promise<RequestResult<{ quote: CartQuote }>> {
   return request<{ quote: CartQuote }>("/api/v1/carts/quote", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ cartVersion }),
+    body: JSON.stringify({ cartVersion, selectedSkuIds }),
   });
 }
 

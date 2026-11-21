@@ -7,7 +7,7 @@ export async function GET() {
     promotionRules: [
       {
         id: "threshold-discount",
-        label: "商品金额满 NT$1,000 减 NT$100",
+        label: "商品金额满 NT$1,000 减 NT$100，每个账号限用一次",
         status: "configured",
       },
       {
@@ -17,7 +17,7 @@ export async function GET() {
       },
       {
         id: "ai-order-discount",
-        label: "AI 助理自动创建订单额外 95 折",
+        label: "AI 对话页自动下单，满减后商品金额额外 95 折",
         status: "configured",
       },
     ],

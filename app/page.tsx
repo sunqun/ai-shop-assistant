@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDocker } from "@/components/assistant-docker";
-import type { CatalogCategory, CatalogProduct } from "../components/home/type";
+import type { CatalogCategory, CatalogProduct, GetProductsParams } from "../components/home/type";
 import { addToCart, animateProductToCart } from "@/lib/cart-client/cart-client";
 import { getCategoriesRequest, getProductsRequest } from "../components/home/api";
 import { ArrowRight, Package, Search, Tags, X } from "lucide-react";
@@ -18,8 +18,13 @@ export default function HomePage() {
   const [query, setQuery] = useState("");
   const keyword = useDeferredValue(query);
   const [categoryId, setCategoryId] = useState("");
-  const [sort, setSort] = useState("recommended");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [sort, setSort] = useState<NonNullable<GetProductsParams["sort"]>>("recommended");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const generation = useRef(0);
+  const moreInFlight = useRef<string | null>(null);
+  const loadedScope = useRef<string | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -41,49 +46,65 @@ export default function HomePage() {
   // 获取商品列表
   useEffect(() => {
     let active = true;
+    const current = ++generation.current;
+    loadedScope.current = null;
+    moreInFlight.current = null;
+    setProducts([]);
+    setNextCursor(null);
+    setLoadingMore(false);
+    setLoadMoreError(false);
     async function loadProducts() {
       setProductsState("loading");
-      const result = await getProductsRequest({ categoryId, keyword });
-      if (!active) return;
+      const result = await getProductsRequest({ categoryId, keyword, sort, pageSize: PAGE_SIZE });
+      if (!active || generation.current !== current) return;
       if (!result.success) {
         setProductsState("error");
         return;
       }
       setProducts(result.data.products);
+      setNextCursor(result.data.nextCursor);
+      loadedScope.current = JSON.stringify([categoryId, keyword, sort]);
       setProductsState("ready");
     }
     loadProducts();
     return () => {
       active = false;
+      if (generation.current === current) generation.current += 1;
     };
-  }, [categoryId, keyword, reload]);
+  }, [categoryId, keyword, sort, reload]);
 
-  /** 对商品列表进行排序 */
-  const sortedProducts = useMemo(() => {
-    const result = [...products];
-    if (sort === "price-low") return result.sort((a, b) => a.price - b.price);
-    if (sort === "price-high") return result.sort((a, b) => b.price - a.price);
-    if (sort === "rating") return result.sort((a, b) => b.rating - a.rating);
-    return result;
-  }, [products, sort]);
+  // 排序在服务端作用于完整结果集；续页失败保留已有商品，并允许原游标重试。
+  const loadMore = useCallback(async (retry = false) => {
+    if (loadedScope.current !== JSON.stringify([categoryId, keyword, sort]) ||
+        productsState !== "ready" || !nextCursor || moreInFlight.current || (loadMoreError && !retry)) return;
+    const current = generation.current;
+    moreInFlight.current = nextCursor;
+    setLoadingMore(true);
+    setLoadMoreError(false);
+    const result = await getProductsRequest({ categoryId, keyword, sort, pageSize: PAGE_SIZE, cursor: nextCursor });
+    if (generation.current !== current) return;
+    moreInFlight.current = null;
+    setLoadingMore(false);
+    if (!result.success) { setLoadMoreError(true); return; }
+    setProducts((previous) => {
+      const ids = new Set(previous.map((product) => product.id));
+      return [...previous, ...result.data.products.filter((product) => !ids.has(product.id))];
+    });
+    setNextCursor(result.data.nextCursor);
+  }, [productsState, nextCursor, loadMoreError, categoryId, keyword, sort]);
 
-  /** 监听商品列表变化，重置可见商品数量 */
-  useEffect(() => setVisibleCount(PAGE_SIZE), [categoryId, keyword, sort]);
   useEffect(() => {
     const target = loadMoreRef.current;
     if (!target) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting)
-          setVisibleCount((count) => Math.min(count + PAGE_SIZE, sortedProducts.length));
+        if (entry.isIntersecting) void loadMore();
       },
       { root: resultsScrollRef.current, rootMargin: "240px" }
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [sortedProducts.length]);
-
-  const visibleProducts = sortedProducts.slice(0, visibleCount);
+  }, [loadMore]);
 
   async function handleAdd(product: CatalogProduct) {
     if (!product.stock) return;
@@ -166,7 +187,7 @@ export default function HomePage() {
               </label>
               <label className="shop-sort">
                 <span className="sr-only">排序</span>
-                <select value={sort} onChange={(event) => setSort(event.target.value)}>
+                <select value={sort} onChange={(event) => setSort(event.target.value as NonNullable<GetProductsParams["sort"]>)}>
                   <option value="recommended">推荐排序</option>
                   <option value="rating">评分优先</option>
                   <option value="price-low">价格由低到高</option>
@@ -190,9 +211,9 @@ export default function HomePage() {
                   重新加载
                 </button>
               </div>
-            ) : visibleProducts.length ? (
+            ) : products.length ? (
               <div className="product-grid">
-                {visibleProducts.map((product) => (
+                {products.map((product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
@@ -219,9 +240,9 @@ export default function HomePage() {
               </div>
             )}
             <div ref={loadMoreRef} className="load-more" aria-live="polite">
-              {productsState === "ready" && visibleProducts.length < sortedProducts.length
-                ? "继续下拉加载更多"
-                : ""}
+              {loadingMore ? "正在加载更多商品…" : loadMoreError ? (
+                <button type="button" className="button button--soft" onClick={() => void loadMore(true)}>加载失败，点击重试</button>
+              ) : productsState === "ready" && nextCursor ? "继续下拉加载更多" : ""}
             </div>
           </div>
         </div>

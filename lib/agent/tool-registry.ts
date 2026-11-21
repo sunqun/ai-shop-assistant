@@ -4,6 +4,7 @@ import {
   callAiSubmitOrderTool,
   callCatalogSearchTool,
   callCreatePaymentLinkTool,
+  callReadProductReviewsTool,
 } from "@/lib/mcp/tool-calls";
 import type {
   CartToolOutput,
@@ -18,6 +19,7 @@ import type {
   CreatePaymentLinkToolOutput,
   McpToolResult,
 } from "@/lib/mcp/types";
+import type { ProductReviewsToolInput, ProductReviewsToolOutput } from "@/lib/mcp/types";
 
 /**
  * Client Agent可调用的工具注册表
@@ -28,6 +30,9 @@ import type {
  * submit_order 提交订单
  */
 export const agentToolRegistry = {
+  read_product_reviews: (
+    input: ProductReviewsToolInput
+  ): Promise<McpToolResult<ProductReviewsToolOutput>> => callReadProductReviewsTool(input),
   // 检索商品：无需用户上下文，直接透传搜索参数
   search_products: (
     input: CatalogSearchToolInput
@@ -40,7 +45,7 @@ export const agentToolRegistry = {
   // 校验库存 + 生成报价：基于当前购物车生成报价预览
   quote_cart: (
     input: QuoteCartToolInput,
-    context: { userid: string }
+    context: { userid: string; shoppingTaskId?: string }
   ): Promise<McpToolResult<QuoteToolOutput>> => callAiQuoteCartTool(input, context),
   // 提交订单：按用户购物车内容正式下单
   submit_order: (
@@ -51,18 +56,33 @@ export const agentToolRegistry = {
   create_payment_link: (
     input: CreatePaymentLinkToolInput,
     context: { userid: string }
-  ): Promise<McpToolResult<CreatePaymentLinkToolOutput>> => callCreatePaymentLinkTool(input, context),
+  ): Promise<McpToolResult<CreatePaymentLinkToolOutput>> =>
+    callCreatePaymentLinkTool(input, context),
 } as const;
 
 export type AgentToolName = keyof typeof agentToolRegistry;
 
 // 所有工具输入/输出的联合类型，供统一调用入口做类型收窄
 export type AgentToolInput =
-  CatalogSearchToolInput | ReconcileCartToolInput | QuoteCartToolInput | SubmitOrderToolInput | CreatePaymentLinkToolInput;
+  | CatalogSearchToolInput
+  | ReconcileCartToolInput
+  | QuoteCartToolInput
+  | SubmitOrderToolInput
+  | CreatePaymentLinkToolInput
+  | ProductReviewsToolInput;
 export type AgentToolOutput =
-  CatalogSearchToolOutput | CartToolOutput | QuoteToolOutput | OrderToolOutput | CreatePaymentLinkToolOutput;
+  | CatalogSearchToolOutput
+  | CartToolOutput
+  | QuoteToolOutput
+  | OrderToolOutput
+  | CreatePaymentLinkToolOutput
+  | ProductReviewsToolOutput;
 
 // 以下重载为每个工具提供精确签名，保证调用处能拿到对应类型的输入输出
+export async function invokeAgentTool(
+  name: "read_product_reviews",
+  input: ProductReviewsToolInput
+): Promise<McpToolResult<ProductReviewsToolOutput>>;
 export async function invokeAgentTool(
   name: "search_products",
   input: CatalogSearchToolInput
@@ -75,7 +95,7 @@ export async function invokeAgentTool(
 export async function invokeAgentTool(
   name: "quote_cart",
   input: QuoteCartToolInput,
-  context: { userid: string }
+  context: { userid: string; shoppingTaskId?: string }
 ): Promise<McpToolResult<QuoteToolOutput>>;
 export async function invokeAgentTool(
   name: "submit_order",
@@ -91,11 +111,16 @@ export async function invokeAgentTool(
 export async function invokeAgentTool(
   name: AgentToolName,
   input: AgentToolInput,
-  context?: { userid: string }
+  context?: { userid: string; shoppingTaskId?: string }
 ): Promise<McpToolResult<AgentToolOutput>> {
   // 需要用户上下文的工具单独透传 userid，其余（如 search_products）无需上下文
-  if (name === "submit_order" || name === "reconcile_cart" || name === "quote_cart" || name === "create_payment_link")
-    return agentToolRegistry[name](input as never, context as { userid: string }) as Promise<
+  if (
+    name === "submit_order" ||
+    name === "reconcile_cart" ||
+    name === "quote_cart" ||
+    name === "create_payment_link"
+  )
+    return agentToolRegistry[name](input as never, context as { userid: string; shoppingTaskId?: string }) as Promise<
       McpToolResult<AgentToolOutput>
     >;
   return agentToolRegistry[name](input as never) as Promise<McpToolResult<AgentToolOutput>>;

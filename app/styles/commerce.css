@@ -30,9 +30,21 @@
 .cart-sheet__list {
   display: grid;
 }
+.cart-select-all {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.cart-checkbox, .cart-select-all input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
 .cart-row {
   display: grid;
-  grid-template-columns: 60px  minmax(0, 1fr) 90px 76px auto auto;
+  grid-template-columns: 18px 60px minmax(0, 1fr) 90px 76px auto;
   gap: 14px;
   align-items: center;
   padding: 14px;

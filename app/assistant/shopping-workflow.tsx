@@ -1,4 +1,4 @@
-import { Bot, CircleAlert } from "lucide-react";
+import { Bot } from "lucide-react";
 import {
   SHOPPING_PHASE_LABELS,
   type ShoppingMode,

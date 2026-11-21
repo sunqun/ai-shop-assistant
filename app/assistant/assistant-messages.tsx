@@ -5,10 +5,11 @@ import { Bot, Check, CircleAlert, Copy, Link2, LoaderCircle, UserRound } from "l
 import type { AssistantController } from "./use-assistant";
 import { AssistantProductCard } from "./assistant-product-card";
 import { formatMoney } from "./format";
+import { AssistantReviewAnalysis } from "./assistant-review-analysis";
 
 type AssistantMessagesProps = Pick<
   AssistantController,
-  "messages" | "busy" | "error" | "copyShortLink"
+  "messages" | "busy" | "error" | "copyShortLink" | "send" | "canSend" | "task"
 >;
 
 export function AssistantMessages({
@@ -16,6 +17,9 @@ export function AssistantMessages({
   busy,
   error,
   copyShortLink,
+  send,
+  canSend,
+  task,
 }: AssistantMessagesProps) {
   return (
     <div className="agent-test__messages" aria-live="polite">
@@ -32,6 +36,13 @@ export function AssistantMessages({
               {message.role === "assistant" ? "购物助手" : "你"}
             </span>
             <p>{message.text}</p>
+            {message.reviewAnalysis ? (
+              <AssistantReviewAnalysis
+                report={message.reviewAnalysis}
+                onAsk={(query) => void send(query)}
+                disabled={!canSend || task?.product?.id !== message.reviewAnalysis.productId}
+              />
+            ) : null}
             {message.result?.product ? (
               <AssistantProductCard product={message.result.product} />
             ) : null}
@@ -63,7 +74,7 @@ export function AssistantMessages({
                       (message.result.quote.quote.shippingMinor ?? 0) / 100,
                       message.result.quote.quote.currency
                     )}
-                    {" · "}数量 1
+                    {" · "}数量 {message.result.quantity ?? 1}
                   </small>
                 ) : null}
               </div>

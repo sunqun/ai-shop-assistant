@@ -6,7 +6,14 @@ import { actOnShoppingTask } from "@/lib/shop-task/shopping-task-service";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
-const actionSchema = z.enum(["advance", "cancel", "confirm", "retry-link", "recover"]);
+const actionSchema = z.enum([
+  "advance",
+  "cancel",
+  "confirm",
+  "retry-link",
+  "recover",
+  "resume-after-reviews",
+]);
 const confirmationSchema = z
   .object({ cartVersion: z.number().int().positive(), quoteId: z.string().uuid() })
   .strict();

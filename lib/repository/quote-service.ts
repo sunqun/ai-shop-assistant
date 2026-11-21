@@ -5,6 +5,7 @@ import { getDbPool } from "@/lib/repository/db";
 import { calculateBestQuote, lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCatalogProducts } from "@/lib/catalog";
 import type { QuoteToolOutput } from "@/lib/mcp/types";
+import { promotionAAvailable, isAutoShoppingTask } from "./promotion-eligibility";
 
 type CartRow = RowDataPacket & {
   cart_id: string;
@@ -43,6 +44,8 @@ export async function quoteCart(input: {
   userid: string;
   cartVersion: number;
   expectedSource?: "WEB" | "AI";
+  selectedSkuIds?: string[];
+  shoppingTaskId?: string;
 }): Promise<QuoteToolOutput> {
   let cartId: string;
   try {
@@ -53,6 +56,9 @@ export async function quoteCart(input: {
   const connection = await getDbPool().getConnection();
   try {
     await connection.beginTransaction();
+    // 与下单保持 users → carts 的加锁顺序，统一账号优惠资格。
+    const [users] = await connection.query<RowDataPacket[]>("SELECT userid FROM users WHERE userid = ? FOR UPDATE", [input.userid]);
+    if (!users.length) throw new QuoteServiceError("UNAUTHENTICATED");
     // 使用 FOR UPDATE 锁定购物车行，避免报价期间购物车被并发修改。
     const [cartRows] = await connection.query<CartRow[]>(
       "SELECT cart_id, source, cart_version, expires_at FROM carts WHERE cart_id = ? AND userid = ? FOR UPDATE",
@@ -68,10 +74,15 @@ export async function quoteCart(input: {
     if (!cartExpiresAt || cartExpiresAt.getTime() <= Date.now())
       throw new QuoteServiceError("CART_RESERVATION_EXPIRED");
     // 仅取仍有分配数量的条目，并锁定其预留记录，确保价格基于有效库存计算。
-    const [itemRows] = await connection.query<CartItemRow[]>(
+    const [availableRows] = await connection.query<CartItemRow[]>(
       "SELECT ci.sku_id, s.product_id, ci.allocated_quantity, ir.reserved_quantity, ir.status AS reservation_status, ir.expires_at AS reservation_expires_at FROM cart_items ci INNER JOIN inventory_skus s ON s.sku_id = ci.sku_id LEFT JOIN inventory_reservations ir ON ir.cart_id = ci.cart_id AND ir.sku_id = ci.sku_id WHERE ci.cart_id = ? AND ci.allocated_quantity > 0 ORDER BY ci.sku_id FOR UPDATE",
       [cartId]
     );
+    const selection = input.selectedSkuIds === undefined ? null : new Set(input.selectedSkuIds);
+    if (selection && (!selection.size || selection.size !== input.selectedSkuIds!.length ||
+        [...selection].some((sku) => !availableRows.some((item) => item.sku_id === sku))))
+      throw new QuoteServiceError("INVALID_CART_SELECTION");
+    const itemRows = selection ? availableRows.filter((item) => selection.has(item.sku_id)) : availableRows;
     if (!itemRows.length) throw new QuoteServiceError("OUT_OF_STOCK");
     const products = await getCatalogProducts(itemRows.map((item) => item.product_id));
     let subtotalMinor = 0;
@@ -89,17 +100,20 @@ export async function quoteCart(input: {
       if (!product) throw new QuoteServiceError("PRICING_CATALOG_UNAVAILABLE");
       subtotalMinor += lineSubtotalMinor(product.price, Number(item.allocated_quantity));
     }
-    // 依据小计金额与来源（AI 订单额外计入 aiSubtotalMinor）选择最优优惠规则。
+    const availableA = await promotionAAvailable(connection, input.userid);
+    const eligibleC = cart.source === "AI" && await isAutoShoppingTask(connection, input.userid, input.shoppingTaskId);
     const quote = calculateBestQuote({
       subtotalMinor,
       source: cart.source,
       aiSubtotalMinor: cart.source === "AI" ? subtotalMinor : 0,
+      promotionAAvailable: availableA,
+      aiOrderEligible: eligibleC,
     });
     // 报价有效期取 15 分钟与购物车过期时间的较小值，确保两者同步失效。
     const quoteExpiresAt = new Date(Math.min(Date.now() + 15 * 60 * 1000, cartExpiresAt.getTime()));
     const quoteId = randomUUID();
     await connection.execute(
-      "INSERT INTO cart_quotes (quote_id, cart_id, cart_version, promotion, rule_version, subtotal_minor, discount_minor, shipping_minor, total_minor, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO cart_quotes (quote_id, cart_id, cart_version, promotion, rule_version, subtotal_minor, discount_minor, shipping_minor, total_minor, expires_at, selected_sku_ids, shopping_task_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         quoteId,
         cartId,
@@ -111,6 +125,8 @@ export async function quoteCart(input: {
         quote.selected.shippingMinor,
         quote.selected.totalMinor,
         quoteExpiresAt,
+        selection ? JSON.stringify(itemRows.map((item) => item.sku_id)) : null,
+        input.shoppingTaskId ?? null,
       ]
     );
     await connection.commit();

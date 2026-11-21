@@ -17,7 +17,9 @@ export default function AssistantTestPage() {
         <div className="agent-test__identity">
           <p className="eyebrow">SHOPPING AGENT</p>
           <span className="agent-test__online">
-            <span className="agent-test__online-text">AI助手</span><i />在线
+            <span className="agent-test__online-text">AI助手</span>
+            <i />
+            在线
           </span>
         </div>
         <div className="agent-test__mode-bar">
@@ -66,6 +68,9 @@ export default function AssistantTestPage() {
             busy={busy && !task?.canConfirm && !assistant.paused && !task?.canRecover}
             error={error}
             copyShortLink={copyShortLink}
+            send={send}
+            canSend={assistant.canSend}
+            task={task}
           />
           {messages.length === 1 && !busy ? (
             <div className="agent-test__suggestions">

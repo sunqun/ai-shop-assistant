@@ -1,6 +1,17 @@
 import type { RowDataPacket } from "mysql2/promise";
 import type { CatalogProduct } from "./types";
 
+// 高毛利商品推荐分加权规则：毛利率达到阈值时，推荐分乘以放大系数。
+// 阈值与系数集中在此定义，排序与分页游标共用同一表达式，避免多处重复。
+export const HIGH_MARGIN_RANK_THRESHOLD = 0.3;
+export const HIGH_MARGIN_RANK_FACTOR = 1.5;
+
+// 生成「推荐分 × 毛利加权」的 SQL 排序表达式；alias 为商品表别名。
+// 该分数只用于服务端排序，不通过任何结果字段暴露给前端或 LLM。
+export function internalRankExpr(alias: string): string {
+  return `${alias}.recommendation_score * CASE WHEN ${alias}.margin_rate >= ${HIGH_MARGIN_RANK_THRESHOLD} THEN ${HIGH_MARGIN_RANK_FACTOR} ELSE 1 END`;
+}
+
 export type ProductRow = RowDataPacket & {
   product_id: string;
   name: string;
@@ -26,7 +37,7 @@ export const PRODUCT_SELECT = `
     p.currency, COALESCE(inv.on_hand - inv.reserved, 0) AS stock, p.margin_rate, p.specs,
     ROUND(AVG(r.rating), 1) AS rating,
     COUNT(r.review_id) AS review_count,
-    (p.recommendation_score * CASE WHEN p.margin_rate >= 0.30 THEN 1.5 ELSE 1 END) AS internal_rank
+    (${internalRankExpr("p")}) AS internal_rank
   FROM products p
   LEFT JOIN categories c ON c.category_id = p.category_id
   LEFT JOIN inventory_skus inv ON inv.product_id = p.product_id

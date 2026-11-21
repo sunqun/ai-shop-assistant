@@ -41,9 +41,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       products: result.data.products,
       nextCursor: result.data.nextCursor,
-      intentSummary: makeIntentSummary(result.intent),
-      searchMode: result.searchMode,
+      intentSummary: result.reply ?? makeIntentSummary(result.intent),
+      routing: result.routing,
+      reply: result.reply,
       sessionId: result.sessionId,
+      clarification: result.data.clarification,
+      clarificationContext: result.data.clarificationContext,
     });
   } catch (error) {
     console.error(

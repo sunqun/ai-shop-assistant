@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * AI 购物助手 Dock 组件。
+ *
+ * 提供：自然语言搜商品（带游标分页与历史）、查看商品详情/评论、
+ * 加入购物车、直接下单、生成/删除支付短链等操作。
+ * 可独立使用，也可通过 embedded 内嵌到其它页面。
+ */
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { reconcileAiCartRequest, quoteAiCartRequest, submitAiOrderRequest } from "@/lib/cart-client/api";
@@ -22,25 +29,31 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter();
   const auth = useOptionalAuth();
   const user = auth?.user ?? null;
+  // 搜索相关状态：输入、已提交查询、结果列表、分页游标、会话、历史。
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
+  const [searchReply, setSearchReply] = useState("");
   const [products, setProducts] = useState<AgentProduct[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ query: string; summary: string }>>([]);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  // 交互相关状态：数量、加购/下单/支付短链的进行中标记。
   const [aiQuantity, setAiQuantity] = useState(1);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const [payingProductId, setPayingProductId] = useState<string | null>(null);
   const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | null>(null);
+  // 详情弹窗相关状态：商品、评论、加载态。
   const [detailProduct, setDetailProduct] = useState<AgentProduct | null>(null);
   const [detailReviews, setDetailReviews] = useState<AgentReview[]>([]);
   const [detailState, setDetailState] = useState<"loading" | "ready" | "error">("loading");
+  // 支付短链列表与增删进行中标记。
   const [paymentLinks, setPaymentLinks] = useState<PaymentLinkView[]>([]);
   const [creatingPaymentLinkId, setCreatingPaymentLinkId] = useState<string | null>(null);
   const [deletingPaymentLinkId, setDeletingPaymentLinkId] = useState<string | null>(null);
 
+  // 登录后加载当前用户的支付短链列表；未登录或用户切换时清空。
   useEffect(() => {
     if (!user) {
       setPaymentLinks([]);
@@ -58,6 +71,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     };
   }, [user]);
 
+  // 为某商品生成支付短链（数量取当前 aiQuantity）。
   async function createPaymentLinkForProduct(product: AgentProduct) {
     if (!product.stock) {
       showToast("该商品暂时缺货。", "info");
@@ -67,6 +81,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     try {
       const result = await createPaymentLinkRequest(product.id, aiQuantity);
       if (result.success) {
+        // 新短链插到最前，并去重同 linkId 的旧条目。
         setPaymentLinks((current) => [result.data, ...current.filter((item) => item.linkId !== result.data.linkId)]);
         showToast("支付短链已生成。", "success");
       }
@@ -75,6 +90,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  // 删除指定支付短链。
   async function removePaymentLink(link: PaymentLinkView) {
     setDeletingPaymentLinkId(link.linkId);
     try {
@@ -88,22 +104,27 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  // 搜索商品：cursor 为空表示新搜索（重置结果），否则追加下一页。
   async function searchProducts(searchQuery: string, cursor?: string) {
     const normalizedQuery = searchQuery.trim();
     if (!normalizedQuery) return;
     setState("loading");
+    setSearchReply("");
     const result = await searchProductsRequest(normalizedQuery, cursor, sessionId ?? undefined);
     if (!result.success) {
       setState("error");
       return;
     }
     const data = result.data;
+    setSearchReply(data.reply ?? "");
     if (data.sessionId) setSessionId(data.sessionId);
+    // 有游标则追加，否则替换为新结果。
     setProducts((current) =>
       cursor ? [...current, ...(data.products ?? [])] : (data.products ?? [])
     );
     setNextCursor(data.nextCursor ?? null);
     setSubmittedQuery(normalizedQuery);
+    // 只有新搜索才写入历史，翻页不重复记录。
     if (!cursor) {
       setHistory((current) => [
         ...current,
@@ -113,6 +134,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     setState("ready");
   }
 
+  // 打开商品详情弹窗，并加载其评论。
   async function openDetail(product: AgentProduct) {
     setDetailProduct(product);
     setDetailReviews([]);
@@ -127,6 +149,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     setDetailState("ready");
   }
 
+  // 下单后刷新商品库存：同时更新结果列表与详情弹窗里的商品。
   async function refreshProductAfterOrder(productId: string): Promise<boolean> {
     const result = await getProductDetailRequest(productId);
     if (!result.success) return false;
@@ -138,6 +161,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     return true;
   }
 
+  // 加入购物车（普通购物车，非 AI 直接下单）。
   async function addToCart(product: AgentProduct) {
     if (!product.stock) {
       showToast("该商品暂时缺货。", "info");
@@ -152,12 +176,14 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
       if (!result.success) return;
       setAddedId(product.id);
       showToast(result.data.reachedLimit ? "已达到库存上限，已加入可用数量。" : "已加入购物车。", "success");
+      // 1.6 秒后清除「已加入」提示，恢复按钮文案。
       window.setTimeout(() => setAddedId((id) => (id === product.id ? null : id)), 1600);
     } finally {
       setAddingId(null);
     }
   }
 
+  // 直接下单流程：reconcile（锁定库存）→ quote（核价）→ submit（下单）→ 刷新库存 → 展示订单结果。
   async function payForProduct(product: AgentProduct) {
     if (!product.stock) {
       showToast("该商品暂时缺货。", "info");
@@ -165,29 +191,34 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
     }
     setPayingProductId(product.id);
     try {
+      // 1. 合并 AI 购物车并锁定库存。
       const cartResult = await reconcileAiCartRequest([{ id: product.id, quantity: aiQuantity }]);
       if (!cartResult.success) {
         setPayingProductId(null);
         return;
       }
       const cart = cartResult.data;
+      // 全部缺货或没有任何分配数量时中止。
       if (cart.fullyOutOfStock || !cart.allocations.some((item) => item.allocatedQuantity > 0)) {
         showToast("当前商品暂时无库存，请稍后重试。", "info");
         setPayingProductId(null);
         return;
       }
+      // 2. 基于购物车版本核价。
       const quoteResult = await quoteAiCartRequest(cart.cartVersion);
       if (!quoteResult.success) {
         setPayingProductId(null);
         return;
       }
       const quote = quoteResult.data;
+      // 3. 用核价结果正式下单。
       const orderResult = await submitAiOrderRequest(cart.cartVersion, quote.quote.quoteId);
       if (!orderResult.success) {
         setPayingProductId(null);
         return;
       }
       const order = orderResult.data;
+      // 汇总实际分配到的数量（可能受库存上限影响，与 aiQuantity 不一致）。
       const allocatedQuantity = cart.allocations.reduce((sum, item) => sum + item.allocatedQuantity, 0);
       try {
         const refreshed = await refreshProductAfterOrder(product.id);
@@ -195,6 +226,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
       } catch {
         showToast("订单已建立，但商品库存刷新失败，请稍后刷新页面。");
       }
+      // 构造订单回执，交给 OrderResultDialog 展示。
       setOrderReceipt({
         orderGroupId: order.orderGroupId,
         productName: product.name,
@@ -214,6 +246,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className={`assistant-column${paymentLinks.length ? " assistant-column--with-links" : ""}`}>
+      {/* 有支付短链时，在 Dock 上方并列展示短链列表 */}
       {paymentLinks.length ? (
         <PaymentLinks
           paymentLinks={paymentLinks}
@@ -232,6 +265,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
           </div>
         </div>
         <div className="assistant-dock__body">
+          {/* 搜索表单：提交时清空旧结果并触发新搜索 */}
           <form
             className="assistant-composer"
             onSubmit={(event) => {
@@ -259,6 +293,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
             </button>
           </form>
 
+          {/* 搜索历史与结果数量提示 */}
           {history.length ? (
             <div className="assistant-history" aria-live="polite">
               {history.map((turn, index) => (
@@ -275,12 +310,13 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                   : products.length
                     ? `相关商品 ${products.length} 件`
                     : state === "ready"
-                      ? "暂无相关商品"
+                      ? searchReply ? "助理提示" : "暂无相关商品"
                       : ""}
               </span>
             </div>
           ) : null}
           <div className="assistant-dock__results">
+            {/* 初始引导态 */}
             {state === "idle" ? (
               <div className="assistant-empty assistant-empty--idle">
                 <div className="assistant-empty__icon"><Sparkles size={24} strokeWidth={1.7} /></div>
@@ -299,6 +335,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                 </div>
               </div>
             ) : null}
+            {/* 加载 / 错误 / 空结果 / 商品列表 */}
             {state === "loading" && !products.length ? (
               <p className="assistant-empty">正在查询商品和库存...</p>
             ) : null}
@@ -315,7 +352,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
               </div>
             ) : null}
             {state === "ready" && !products.length ? (
-              <p className="assistant-empty">没有找到符合描述的商品，请换一种说法。</p>
+              <p className="assistant-empty">{searchReply || "没有找到符合描述的商品，请换一种说法。"}</p>
             ) : null}
             {products.map((product) => (
               <div className="assistant-result" key={product.id}>
@@ -338,6 +375,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                       {product.stock ? ` · 库存 ${product.stock}` : " · 暂时缺货"}
                     </span>
                   </div>
+                  {/* 数量 + 加购 / 付款 / 生成短链 操作区 */}
                   <span className="assistant-result__actions">
                     <label className="assistant-quantity">
                       数量
@@ -383,6 +421,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                 </span>
               </div>
             ))}
+            {/* 有下一页游标时显示「加载更多」 */}
             {nextCursor ? (
               <button
                 className="assistant-more"
@@ -398,6 +437,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
         </div>
       </aside>
 
+      {/* 商品详情弹窗 */}
       {detailProduct ? (
         <ProductDetailDialog
           product={detailProduct}
@@ -407,6 +447,7 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
         />
       ) : null}
 
+      {/* 下单结果弹窗 */}
       {orderReceipt ? (
         <OrderResultDialog
           receipt={orderReceipt}

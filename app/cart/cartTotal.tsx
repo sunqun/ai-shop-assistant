@@ -25,7 +25,7 @@ export function CartTotal({
     <aside className="cart-total">
       <div className="cart-total__head">
         <span>预计应付</span>
-        {quoteState === "ready" && quote ? (
+        {itemCount === 0 ? <strong className="cart-total__amount">{formatMinor(0)}</strong> : quoteState === "ready" && quote ? (
           <strong className="cart-total__amount">{formatMinor(quote.totalDueMinor)}</strong>
         ) : (
           <span className="cart-total__amount cart-total__amount--pending">
@@ -54,13 +54,15 @@ export function CartTotal({
       ) : null}
 
       <div className="cart-total__foot">
+        <p className="cart-total__notice">{itemCount === 0 ? "请勾选需要结算的商品。" : `仅结算已勾选的 ${itemCount} 件商品。`}</p>
+        {quoteState === "error" || inventoryState === "error" ? <p className="cart-total__notice" role="alert">库存或报价暂时无法确认，请刷新后重试。</p> : null}
         {!isAuthorized ? (
           <p className="cart-total__notice">尚未完成下单授权，请前往「订单」页完成授权。</p>
         ) : null}
         <button
           className="cart-total__pay"
           type="button"
-          disabled={quoteState !== "ready" || !isAuthorized || submitting || itemCount === 0}
+          disabled={!quote || inventoryState !== "ready" || quoteState !== "ready" || !isAuthorized || submitting || itemCount === 0}
           onClick={onPay}
         >
           {submitting ? "正在创建订单…" : "付款"}

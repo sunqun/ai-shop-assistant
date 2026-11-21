@@ -11,6 +11,8 @@ export {
   searchCatalogProducts,
   listCatalogProducts,
   listProducts,
+  listProductPage,
+  ProductPageError,
   getCatalogProduct,
   getCatalogProducts,
 } from "./products";

@@ -584,6 +584,103 @@ body:has(.agent-test) {
   font-size: 11px;
   line-height: 1.6;
 }
+.agent-reviews {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.agent-reviews header,
+.agent-reviews__source {
+  display: grid;
+  gap: 6px;
+}
+.agent-reviews h3,
+.agent-reviews p {
+  margin: 0;
+}
+.agent-reviews h3 {
+  font-size: 14px;
+}
+.agent-reviews__coverage,
+.agent-reviews__count,
+.agent-reviews__source span,
+.agent-reviews__citations span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.agent-reviews__count {
+  display: block;
+}
+.agent-reviews__insight,
+.agent-reviews__source,
+.agent-reviews__answer {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.agent-reviews__source p,
+.agent-reviews__answer p,
+.agent-reviews q {
+  white-space: pre-wrap;
+}
+.agent-reviews__source {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.agent-reviews__citations,
+.agent-reviews__limitations {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.agent-reviews__citations li {
+  margin-top: 8px;
+}
+.agent-reviews__citations q,
+.agent-reviews__citations span {
+  display: block;
+}
+.agent-reviews button {
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  white-space: normal;
+}
+.agent-reviews button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.agent-reviews summary {
+  cursor: pointer;
+}
+.agent-reviews table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.agent-reviews th,
+.agent-reviews td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.agent-reviews__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .agent-test__detail-note svg {
   flex: 0 0 auto;
   margin-top: 1px;

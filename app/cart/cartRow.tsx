@@ -8,10 +8,16 @@ function formatMinor(value: number) {
 
 export function CartRow({
   line,
+  checked,
+  disabled,
+  onSelect,
   onQuantityChange,
   onRemove,
 }: {
   line: CartLine;
+  checked: boolean;
+  disabled: boolean;
+  onSelect: (skuId: string, checked: boolean) => void;
   onQuantityChange: (skuId: string, quantity: number) => void;
   onRemove: (skuId: string) => void;
 }) {
@@ -28,6 +34,10 @@ export function CartRow({
 
   return (
     <article className="cart-row">
+      <input className="cart-checkbox" type="checkbox" checked={checked}
+        disabled={disabled || item.allocatedQuantity <= 0}
+        aria-label={`选择 ${product.name}`}
+        onChange={(event) => onSelect(item.skuId, event.target.checked)} />
       <div
         className={`cart-row__visual cart-row__visual--${product.tone || "all"}`}
         aria-hidden="true"
@@ -60,6 +70,7 @@ export function CartRow({
         <span className="sr-only">{product.name} 数量</span>
         <input
           type="number"
+          disabled={disabled}
           min="1"
           max={product.stock || 1}
           value={item.requestedQuantity}
@@ -68,7 +79,7 @@ export function CartRow({
       </label>
       <strong className="cart-row__subtotal">{subtotal}</strong>
 
-      <button className="cart-remove" type="button" onClick={() => onRemove(item.skuId)}>
+      <button className="cart-remove" type="button" disabled={disabled} aria-label={`移除 ${product.name}`} onClick={() => onRemove(item.skuId)}>
         <TrashIcon size={14} />
       </button>
     </article>

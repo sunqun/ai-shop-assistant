@@ -1,4 +1,5 @@
 export type AppliedPromotion = "A+B" | "B" | "A+B+C" | "B+C";
+export const PRICING_RULE_VERSION = "promotions-2026-11-21-v3";
 export type PricingCandidate = {
   id: AppliedPromotion;
   discountMinor: number;
@@ -10,6 +11,8 @@ export type PricingInput = {
   subtotalMinor: number;
   source: "WEB" | "AI";
   aiSubtotalMinor?: number;
+  promotionAAvailable?: boolean;
+  aiOrderEligible?: boolean;
 };
 
 export function toMinor(price: number): number {
@@ -39,17 +42,19 @@ export function calculateBestQuote(input: PricingInput): {
     (input.source === "WEB" && aiSubtotal !== 0)
   )
     throw new Error("INVALID_PRICING_INPUT");
-  const hasA = subtotal >= 100000;
+  const hasA = input.promotionAAvailable !== false && subtotal >= 100000;
   const freeShipping = subtotal >= 99000;
   const shippingMinor = freeShipping ? 0 : 10000;
   const discountA = hasA ? 10000 : 0;
-  const discountC = input.source === "AI" ? Math.round(aiSubtotal * 0.05) : 0;
+  const hasC = input.source === "AI" && input.aiOrderEligible === true;
+  // 先使用 A 满减，再对 AI 商品的折后金额打 95 折；运费不参与折扣。
+  const discountC = hasC ? Math.round((aiSubtotal - (subtotal ? discountA * aiSubtotal / subtotal : 0)) * 0.05) : 0;
   const id: AppliedPromotion =
-    input.source === "AI" ? (hasA ? "A+B+C" : "B+C") : hasA ? "A+B" : "B";
+    hasC ? (hasA ? "A+B+C" : "B+C") : hasA ? "A+B" : "B";
   const appliedRules = [
-    hasA ? "A：商品金额满 NT$1,000 减 NT$100" : null,
+    hasA ? "A：商品金额满 NT$1,000 减 NT$100，每个账号限用一次" : null,
     "B：商品金额满 NT$990 免运费，否则运费 NT$100",
-    input.source === "AI" ? "C：AI 商品金额额外 95 折" : null,
+    hasC ? "C：AI 自动下单，满减后商品金额额外 95 折" : null,
   ].filter((label): label is string => Boolean(label));
   const selected = {
     id,
@@ -58,5 +63,5 @@ export function calculateBestQuote(input: PricingInput): {
     totalMinor: subtotal - discountA - discountC + shippingMinor,
     label: appliedRules.join("；"),
   };
-  return { selected, candidates: [selected], appliedRules, ruleVersion: "m3-2026-11-16-v2" };
+  return { selected, candidates: [selected], appliedRules, ruleVersion: PRICING_RULE_VERSION };
 }

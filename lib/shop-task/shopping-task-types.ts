@@ -11,6 +11,8 @@
  */
 import type { CatalogProduct } from "@/lib/catalog";
 import type { OrderToolOutput, QuoteToolOutput } from "@/lib/mcp/types";
+import type { DialogueSnapshot } from "@/lib/intent/type";
+import type { ReviewAnalysisProgress, ReviewAnalysisReport } from "@/lib/reviews/types";
 
 // 交互模式：manual 需用户显式确认下单；auto 报价后延时自动提交。
 export type ShoppingMode = "manual" | "auto";
@@ -38,16 +40,21 @@ export type ShoppingPhase =
 // 任务在执行过程中逐步写入的业务数据快照（可选字段表示尚未产生）。
 export type ShoppingTaskData = {
   product?: CatalogProduct; // 已选商品
+  quantity?: number; // 已核实的本次请求件数
   quote?: QuoteToolOutput; // 报价结果
   order?: OrderToolOutput; // 订单结果
   link?: { urlToken: string }; // 取消后生成的支付短链
   error?: string; // 面向用户的错误文案
   errorCode?: string; // 业务错误码
   clarification?: string; // 需要用户澄清的提示
+  dialogue?: DialogueSnapshot; // 对话状态：已填条件、待填槽位和本轮路由来源
+  reviewProgress?: ReviewAnalysisProgress;
+  reviewAnalysis?: ReviewAnalysisReport;
+  reviewHold?: boolean;
 };
 
 // 返回给前端的任务视图：在业务数据之上叠加任务元信息与操作能力位。
-export type ShoppingTask = ShoppingTaskData & {
+export type ShoppingTask = Omit<ShoppingTaskData, "reviewProgress"> & {
   taskId: string;
   query: string;
   mode: ShoppingMode;
@@ -59,6 +66,7 @@ export type ShoppingTask = ShoppingTaskData & {
   canAdvance: boolean; // 当前是否可推进
   canRecover: boolean; // 当前是否可恢复
   terminal: boolean; // 是否已到达终态
+  canResumeAfterReviews?: boolean;
 };
 
 // 可取消阶段：在这些阶段收到 cancel 才会进入 cancel_pending。
@@ -99,6 +107,6 @@ export const SHOPPING_PHASE_LABELS: Record<ShoppingPhase, string> = {
   canceled_no_product: "已取消；没有可用于生成短链的商品",
   canceled_link_failed: "已停止直接下单，但短链生成失败，可重试",
   failed: "购物流程未完成",
-  needs_clarification: "已找到候选商品，请明确规格后重新发送完整需求",
+  needs_clarification: "已找到候选商品，请补充规格或选择当前商品",
   reconciling_result: "订单结果待核对，请查询原任务，勿重复下单",
 };

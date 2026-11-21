@@ -25,7 +25,7 @@ import type {
 } from "@/lib/mcp/types";
 
 // 交易工具所需的用户上下文：AI 购物车/报价/下单均需要已登录 userid。
-export type CommerceToolContext = { userid?: string };
+export type CommerceToolContext = { userid?: string; shoppingTaskId?: string };
 
 // UUID 格式（含版本位与变体位），用于校验 userid 与 quoteId。
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -158,7 +158,7 @@ export async function callCommerceTool(
       }
       return {
         ok: true,
-        data: await quoteCart({ ...input, userid: context.userid, expectedSource: "AI" }),
+        data: await quoteCart({ ...input, userid: context.userid, expectedSource: "AI", shoppingTaskId: context.shoppingTaskId }),
       };
     }
 

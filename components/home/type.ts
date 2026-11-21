@@ -22,6 +22,7 @@ export type CatalogCategory = {
 
 export type ProductsResponse = {
   products: CatalogProduct[];
+  nextCursor: string | null;
 };
 
 export type CategoriesResponse = {
@@ -31,6 +32,9 @@ export type CategoriesResponse = {
 export type GetProductsParams = {
   categoryId?: string;
   keyword?: string;
+  sort?: "recommended" | "price-low" | "price-high" | "rating";
+  pageSize?: number;
+  cursor?: string;
 };
 
 export type PromotionRule = {

@@ -9,7 +9,7 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
   const {
     query,
     setQuery,
-    busy,
+    canSend,
     inputRef,
     send,
     submit,
@@ -24,6 +24,7 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
     refreshTask,
     retryPaymentLink,
     recoverOrder,
+    resumeAfterReviews,
   } = controller;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -45,11 +46,13 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
           <span>
             {submitting || task.phase === "committing"
               ? "正在创建订单，已停止接受取消…"
-              : paused
-                ? "已恢复任务，点击继续执行后推进流程。"
-                : task.phase === "ready_to_order"
-                  ? `约 ${seconds} 秒后自动创建订单`
-                  : SHOPPING_PHASE_LABELS[task.phase]}
+              : task.reviewHold
+                ? "已为评论阅读暂停自动提交，阅读后可继续自动流程。"
+                : paused
+                  ? "已恢复任务，点击继续执行后推进流程。"
+                  : task.phase === "ready_to_order"
+                    ? `约 ${seconds} 秒后自动创建订单`
+                    : SHOPPING_PHASE_LABELS[task.phase]}
           </span>
           <div className="agent-test__confirm-actions">
             {canCancel ? (
@@ -73,7 +76,16 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
                 确认下单
               </button>
             ) : null}
-            {paused && !submitting ? (
+            {task.reviewHold && !submitting ? (
+              <button
+                type="button"
+                disabled={!task.canResumeAfterReviews || connectionLost || canceling}
+                onClick={() => void resumeAfterReviews()}
+              >
+                继续自动流程
+              </button>
+            ) : null}
+            {paused && !task.reviewHold && !submitting ? (
               <button type="button" disabled={connectionLost || canceling} onClick={resume}>
                 继续执行
               </button>
@@ -102,19 +114,19 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
         maxLength={1000}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
             void send(query);
           }
         }}
-        placeholder="描述你想购买的商品…"
+        placeholder={task?.dialogue?.pendingSlot?.question || "描述购物需求，或补充当前条件…"}
         rows={2}
-        disabled={busy}
+        disabled={!canSend}
         aria-label="发送消息"
       />
       <div className="agent-test__composer-footer">
         <span>Enter 发送 · Shift + Enter 换行</span>
-        <button type="submit" disabled={busy || !query.trim()} aria-label="发送">
+        <button type="submit" disabled={!canSend || !query.trim()} aria-label="发送">
           <ArrowUp size={18} />
         </button>
       </div>

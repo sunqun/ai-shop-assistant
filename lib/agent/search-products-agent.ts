@@ -1,14 +1,25 @@
-import { isEmptyIntent, makeIntentSummary, mergeIntent, parseProductSearchIntentWithMode } from "@/lib/intent";
+import {
+  isEmptyIntent,
+  emptyIntent,
+  makeIntentSummary,
+  isSearchResolution,
+  resolveAssistantIntent,
+  type IntentResolution,
+} from "@/lib/intent";
 import { invokeAgentTool } from "@/lib/agent/tool-registry";
-import { appendTurn, getOrCreateSession } from "@/lib/agent/session-store";
+import { appendTurn, getOrCreateSession, updateSessionContext } from "@/lib/agent/session-store";
 import type { CatalogSearchToolOutput } from "@/lib/mcp/types";
+import type { ProductSearchIntent } from "@/lib/catalog";
+import { normalizeSearchConstraints } from "@/lib/intent/search-constraints";
+import type { IntentRouting, SearchResolution } from "@/lib/intent/type";
 
 // Agent 商品搜索的统一返回结构：成功时返回解析后的意图与商品数据，失败时返回结构化错误码。
 export type ProductAgentResult =
   | {
       ok: true;
-      intent: Awaited<ReturnType<typeof parseProductSearchIntentWithMode>>["intent"];
-      searchMode: "model" | "fallback";
+      intent: ProductSearchIntent;
+      routing: IntentRouting;
+      reply?: string;
       sessionId: string;
       data: CatalogSearchToolOutput;
     }
@@ -18,25 +29,31 @@ export type ProductAgentResult =
  * Agent 编排层：LLM 只解析意图，工具注册表负责调用目录 MCP。
  *
  * 职责：把「自然语言查询」编排成一次完整的商品搜索，串起会话记忆、
- * 意图解析、上下文合并、工具调用与结果回写，对外只暴露一个稳定入口。
+ * 统一意图识别、工具调用与结果回写；本入口只消费搜索决策。
  */
 export async function searchProductsForAgent(
   query: string,
   pageSize: number,
   cursor?: string,
-  sessionId?: string
+  sessionId?: string,
+  prepared?: SearchResolution
 ): Promise<ProductAgentResult> {
-  // 1. 复用或新建会话，取出上一轮意图用于后续的上下文合并。
+  // 1. 复用或新建会话，历史消息与当前结构化状态分别读取。
   const session = getOrCreateSession(sessionId);
-  const previousIntent = session.turns.at(-1)?.intent;
 
-  // 2. 让 LLM 把查询解析成结构化意图；解析失败按「可重试」降级返回。
-  let parsed;
+  // 2. 新消息经过统一分层识别；服务端任务复用已解析的完整条件。
+  let parsed: IntentResolution;
   try {
-    parsed = await parseProductSearchIntentWithMode(
-      query,
-      session.turns.map((turn) => ({ query: turn.query, intentSummary: turn.intentSummary }))
-    );
+    parsed = prepared
+      ? {
+          intent: normalizeSearchConstraints(prepared.intent),
+          routing: prepared.routing,
+        }
+      : await resolveAssistantIntent(
+          query,
+          session.turns,
+          session.context
+        );
   } catch {
     return {
       ok: false,
@@ -46,16 +63,21 @@ export async function searchProductsForAgent(
     };
   }
 
-  // 3. 服务端确定性合并：本轮若无新增商品/品类/品牌词，则继承上一轮检索主体。
-  const intent = mergeIntent(previousIntent, parsed.intent);
+  // 3. 统一入口已完成条件合并；只准入搜索动作，不执行其他能力。
+  const intent: ProductSearchIntent = isSearchResolution(parsed)
+    ? parsed.intent
+    : emptyIntent();
 
   // 4. 空意图（闲聊/超域）不检索商品，直接返回空结果。
   if (isEmptyIntent(intent)) {
     return {
       ok: true,
       intent,
-      searchMode: parsed.searchMode,
       sessionId: session.sessionId,
+      routing: parsed.routing,
+      reply:
+        parsed.reply ||
+        "当前是商品搜索入口；查看进度、确认/取消或分析评论请使用 AI 助理对话入口。",
       data: { products: [], nextCursor: null },
     };
   }
@@ -80,14 +102,24 @@ export async function searchProductsForAgent(
   // 7. 检索成功后记录本轮查询与意图摘要，供后续轮次做上下文继承。
   appendTurn(session.sessionId, {
     query,
-    intent,
     intentSummary: makeIntentSummary(intent),
+  });
+  updateSessionContext(session.sessionId, {
+    product: result.data.products.find((product) => product.stock > 0),
+    phase: result.data.clarification ? "needs_clarification" : "search",
+    dialogue: {
+      intent,
+      routing: parsed.routing,
+      unresolvedRequired: result.data.clarificationContext?.unresolvedRequired ?? [],
+      unresolvedPreferences: result.data.clarificationContext?.unresolvedPreferences ?? [],
+      pendingSlot: result.data.clarificationContext?.pendingSlot,
+    },
   });
   return {
     ok: true,
     intent,
-    searchMode: parsed.searchMode,
     sessionId: session.sessionId,
     data: result.data,
+    routing: parsed.routing,
   };
 }

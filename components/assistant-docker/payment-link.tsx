@@ -1,7 +1,7 @@
 "use client";
 
 import { showToast } from "@/lib/toast";
-import type { PaymentLinkView } from "@/lib/payment-link/payment-link-client";
+import type { PaymentLinkView } from "./types";
 
 function paymentLinkUrl(link: PaymentLinkView) {
   return `${window.location.origin}/handoff?token=${encodeURIComponent(link.urlToken)}`;

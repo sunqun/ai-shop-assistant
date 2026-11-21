@@ -17,6 +17,8 @@ import { getDbPool } from "@/lib/repository/db";
 import { runShoppingReAct } from "../agent/auto-shopping";
 import { submitAiOrder, OrderServiceError } from "@/lib/repository/order-service";
 import { createPaymentLink } from "@/lib/repository/payment-link-service";
+import type { DialogueSnapshot } from "@/lib/intent/type";
+import { REVIEW_LEASE_MS } from "@/lib/reviews/types";
 import {
   CANCELLABLE_PHASES,
   TERMINAL_PHASES,
@@ -48,6 +50,7 @@ export async function createShoppingTask(input: {
   query: string;
   mode: ShoppingMode;
   idempotencyKey: string;
+  dialogue?: DialogueSnapshot;
 }): Promise<ShoppingTask> {
   const [users] = await getDbPool().query<RowDataPacket[]>(
     "SELECT is_authorized FROM users WHERE userid = ?",
@@ -59,7 +62,9 @@ export async function createShoppingTask(input: {
       "请先完成 AI 下单授权后使用购物流程。",
       403
     );
-  return taskView(await createTask(input));
+  return taskView(
+    await createTask({ ...input, data: input.dialogue ? { dialogue: input.dialogue } : undefined })
+  );
 }
 
 // 准备阶段：运行 ReAct，让模型搜索商品、选品、加入购物车（锁库存）并生成报价。
@@ -70,8 +75,10 @@ async function prepare(userid: string, taskId: string, token: string, task: Task
     outcome = await runShoppingReAct({
       userid,
       query: task.query,
+      dialogue: task.data.dialogue,
       confirmOrder: false,
       control: {
+        shoppingTaskId: taskId,
         signal: AbortSignal.timeout(90_000),
         cartIdempotencyKey: `shopping:${taskId}:cart`,
         // 每个工具真正执行前，先检查任务是否仍属于本次操作、是否已被取消。
@@ -148,7 +155,7 @@ async function finishCancellation(userid: string, taskId: string) {
     const link = await createPaymentLink({
       userid,
       productId: task.data.product.id,
-      quantity: 1,
+      quantity: task.data.quantity ?? 1,
       linkId: taskId,
     });
     await updateTask(userid, taskId, (current) => {
@@ -208,7 +215,8 @@ async function commitOrder(userid: string, taskId: string, token: string, task: 
   }
 }
 
-export type ShoppingTaskAction = "advance" | "cancel" | "confirm" | "retry-link" | "recover";
+export type ShoppingTaskAction =
+  "advance" | "cancel" | "confirm" | "retry-link" | "recover" | "resume-after-reviews";
 
 // 任务动作统一入口：在持锁事务内完成状态机迁移，锁外执行对应的耗时操作。
 export async function actOnShoppingTask(
@@ -220,6 +228,32 @@ export async function actOnShoppingTask(
   const token = randomUUID();
   let operation: "prepare" | "commit" | "cancel" | null = null;
   const task = await updateTask(userid, taskId, (current) => {
+    if (action === "resume-after-reviews") {
+      if (
+        !current.data.reviewHold ||
+        current.mode !== "auto" ||
+        !CANCELLABLE_PHASES.includes(current.phase)
+      )
+        return;
+      const progress = current.data.reviewProgress;
+      if (
+        progress?.operationToken &&
+        progress.operationStartedAt &&
+        Date.now() - Date.parse(progress.operationStartedAt) < REVIEW_LEASE_MS
+      )
+        throw new ShoppingTaskError(
+          "REVIEWS_STILL_RUNNING",
+          "评论分析仍在处理中，完成后可继续自动流程。"
+        );
+      current.data.reviewHold = false;
+      if (progress) {
+        progress.operationToken = null;
+        progress.operationStartedAt = null;
+      }
+      if (current.phase === "ready_to_order")
+        current.commitAfter = new Date(Date.now() + AUTO_DELAY_MS).toISOString();
+      return;
+    }
     // 取消：已处于取消相关状态则幂等返回；仅可取消阶段可进入 cancel_pending。
     if (action === "cancel") {
       if (
@@ -299,6 +333,7 @@ export async function actOnShoppingTask(
       current.mode === "auto" &&
       action === "advance"
     ) {
+      if (current.data.reviewHold) return;
       if (!current.commitAfter || Date.now() < Date.parse(current.commitAfter)) return;
       operation = "commit";
     } else if (
