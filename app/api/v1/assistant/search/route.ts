@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const sessionId =
     typeof body.sessionId === "string" && body.sessionId.length < 200 ? body.sessionId : undefined;
   try {
-    // Agent 通过工具注册表调用商品目录 MCP，路由不再直接连接目录数据库服务。
+    // Agent 通过工具注册表调用商品查询 MCP 工具，路由不再直接连接商品数据库服务。
     const result = await searchProductsForAgent(body.query, pageSize, cursor, sessionId);
     if (!result.ok) {
       return NextResponse.json(

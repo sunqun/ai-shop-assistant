@@ -319,11 +319,9 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
             {/* 初始引导态 */}
             {state === "idle" ? (
               <div className="assistant-empty assistant-empty--idle">
-                <div className="assistant-empty__icon"><Sparkles size={24} strokeWidth={1.7} /></div>
-                <strong>描述一下你想找的好物</strong>
                 <p>告诉我预算、场景或偏好，我会从商品里帮你筛选。</p>
                 <div className="assistant-suggestions" aria-label="快捷查询">
-                  {["通勤降噪耳机", "桌面收纳好物", "适合送人的礼物"].map((suggestion) => (
+                  {["通勤降噪耳机", "咖啡推荐"].map((suggestion) => (
                     <button
                       type="button"
                       key={suggestion}

@@ -21,14 +21,14 @@ export function ShoppingWorkflow({ phase }: { phase?: ShoppingPhase }) {
           <span>01</span>
           <div>
             <strong>搜索商品</strong>
-            <small>匹配真实商品目录与库存</small>
+            <small>匹配商城商品信息与库存</small>
           </div>
         </li>
         <li>
           <span>02</span>
           <div>
             <strong>选择商品</strong>
-            <small>优先选择目录排序靠前的有货商品</small>
+            <small>优先选择推荐排序靠前的有货商品</small>
           </div>
         </li>
         <li>

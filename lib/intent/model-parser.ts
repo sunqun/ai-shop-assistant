@@ -14,7 +14,7 @@ export async function parseModelIntent(
   history: IntentHistoryTurn[],
   context?: DialogueContext
 ): Promise<IntentToolOutput | undefined> {
-  // 单次解析同时判断动作与提取本轮条件，可读任务上下文，不查询目录或执行交易。
+  // 单次解析同时判断动作与提取本轮条件，可读任务上下文，不查询商城商品库或执行交易。
   const messages: Message[] = [
     { role: "system", content: buildIntentSystemPrompt(context) },
     ...history.flatMap<Message>((turn) => [

@@ -9,16 +9,16 @@ import type {
 } from "@/lib/mcp/types";
 
 /**
- * 商品目录 MCP Server。
+ * 商城商品查询 MCP 工具服务（当前为进程内调用）。
  *
  * Server 只暴露业务工具，不接受 SQL、排序字段或内部推荐权重等参数。
- * 别名展开、库存过滤和内部排序仍由目录域服务负责。
+ * 别名展开、库存过滤和内部排序仍由商品查询服务负责。
  */
 export async function callCatalogTool(
   call: McpToolCall<"catalog.search_products">
 ): Promise<McpToolResult<CatalogSearchToolOutput>> {
   if (call.name !== "catalog.search_products") {
-    return { ok: false, error: { code: "MCP_TOOL_NOT_FOUND", message: "商品目录工具不存在。" } };
+    return { ok: false, error: { code: "MCP_TOOL_NOT_FOUND", message: "商品查询工具不存在。" } };
   }
 
   const input = call.arguments as CatalogSearchToolInput;
@@ -48,7 +48,7 @@ export async function callCatalogTool(
       ok: false,
       error: {
         code: "CATALOG_QUERY_UNAVAILABLE",
-        message: "商品目录暂时无法查询。",
+        message: "暂时无法查询商品信息。",
         retryable: true,
       },
     };

@@ -26,7 +26,7 @@ export type ProductAgentResult =
   | { ok: false; code: string; message: string; retryable?: boolean };
 
 /**
- * Agent 编排层：LLM 只解析意图，工具注册表负责调用目录 MCP。
+ * Agent 编排层：LLM 只解析意图，工具注册表负责调用商品查询 MCP 工具。
  *
  * 职责：把「自然语言查询」编排成一次完整的商品搜索，串起会话记忆、
  * 统一意图识别、工具调用与结果回写；本入口只消费搜索决策。
@@ -83,7 +83,7 @@ export async function searchProductsForAgent(
     };
   }
 
-  // 5. 通过工具注册表调用目录 MCP，真正执行商品检索。
+  // 5. 通过工具注册表调用商品查询 MCP 工具，真正执行商品检索。
   const result = await invokeAgentTool("search_products", {
     intent,
     pageSize,

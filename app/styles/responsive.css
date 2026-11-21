@@ -1,7 +1,7 @@
 /* Shared desktop breakpoints and storefront layout adjustments. */
 /* Hallmark homepage finish: editorial rhythm with a persistent assistant rail. */
 @media (min-width: 1201px) {
-  .assistant-dock--embedded { position: sticky; top: 88px; height: calc(100vh - 112px); min-height: 620px; border-radius: 5px; box-shadow: none; }
+  .assistant-dock--embedded { border-radius: 5px; box-shadow: none; }
 }
 @media (min-width: 861px) and (max-width: 1200px) {
   body:has(.shop-home) .site-header__inner,
@@ -9,7 +9,7 @@
   .shop-home { grid-template-columns: minmax(0, 1fr) 310px; gap: 20px; }
   .shop-body { grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .assistant-dock--embedded { position: sticky; top: 88px; height: calc(100vh - 112px); min-height: 560px; border-radius: 5px; }
+  .assistant-dock--embedded { border-radius: 5px; }
 }
 @media (max-width: 860px) {
   body:has(.shop-home) { overflow-y: auto; }

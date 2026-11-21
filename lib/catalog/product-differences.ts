@@ -81,7 +81,7 @@ export function productDifferences(
     ];
     add(
       `${constraint.attribute}${relation}${constraint.value}${constraint.unit ?? ""}`,
-      entry ? `${entry[0]}：${entry[1]}` : "目录中缺少可核实的对应规格",
+      entry ? `${entry[0]}：${entry[1]}` : "商品信息中缺少可核实的对应规格",
       entry && !ambiguous && measurements.length ? "not_met" : "unverified",
     );
   }

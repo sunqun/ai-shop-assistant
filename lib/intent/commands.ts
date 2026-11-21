@@ -90,7 +90,7 @@ export function matchesContextCommand(
   return contextCommands[kind].has(normalizedText);
 }
 
-// 目录唯一性匹配的语法前缀只在此维护，不用于任意句子提词。
+// 商品名称或别名唯一匹配的语法前缀只在此维护，不用于任意句子提词。
 export const CATALOG_SEARCH_PREFIXES = [
   "我想买",
   "我想買",

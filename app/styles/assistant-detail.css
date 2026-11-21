@@ -12,17 +12,21 @@
   top: auto;
   right: auto;
   bottom: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
   width: auto;
-  height: 100%;
+  height: auto;
   min-height: 0;
   max-height: none;
   border-radius: 12px;
   box-shadow: var(--shadow-soft);
 }
-.assistant-column--with-links .assistant-dock--embedded {
-  flex: 1 1 0;
+.assistant-dock--embedded .assistant-dock__header {
+  flex: 0 0 auto;
 }
-.assistant-payment-links--above {
+.assistant-column > .assistant-payment-links--above {
+  grid-template-rows: auto minmax(0, 1fr);
   flex: 0 0 92px;
   height: 92px;
   max-height: 92px;
@@ -36,12 +40,15 @@
   overflow-y: auto;
 }
 .assistant-dock--embedded .assistant-dock__body {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
   min-height: 0;
-  height: calc(100% - 66px);
 }
+.assistant-dock--embedded .assistant-composer { flex: 0 0 auto; }
+.assistant-dock--embedded .assistant-history { flex: 0 1 auto; min-height: 0; }
 .assistant-dock--embedded .assistant-dock__results {
+  flex: 1 1 0;
   height: auto;
   min-height: 0;
   align-content: start;

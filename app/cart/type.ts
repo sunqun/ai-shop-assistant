@@ -3,7 +3,7 @@ import type { CartQuote, UserCartItem } from "@/lib/cart-client/cart-client";
 
 export type { CatalogProduct, CartQuote, UserCartItem };
 
-/** 商品目录接口返回结构 */
+/** 商品信息查询接口返回结构 */
 export type ProductsResponse = {
   products: CatalogProduct[];
 };

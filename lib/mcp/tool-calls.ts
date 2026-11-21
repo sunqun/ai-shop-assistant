@@ -20,7 +20,7 @@ import type {
  * MCP Client 负责屏蔽传输方式。
  * 当前调用同进程 Server，未来可替换为远程 MCP JSON-RPC 调用而不改 Agent。
  */
-// 商品目录检索：无需用户上下文，直接转发到 catalog server。
+// 商城商品查询：无需用户上下文，直接转发到 catalog server。
 export async function callCatalogSearchTool(
   input: CatalogSearchToolInput
 ): Promise<McpToolResult<CatalogSearchToolOutput>> {

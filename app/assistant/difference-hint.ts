@@ -6,7 +6,13 @@ const FALLBACK_HINT =
 export function differenceActual(difference: ProductDifference): string | undefined {
   const actual = difference.actual.trim();
   return actual &&
-    !["商品目录资料无法核实该要求", "目录中缺少可核实的对应规格"].includes(actual)
+    // 历史购物任务持久化过旧提示，读取时仍需识别并隐藏。
+    ![
+      "现有商品信息无法核实该要求",
+      "商品信息中缺少可核实的对应规格",
+      "商品目录资料无法核实该要求",
+      "目录中缺少可核实的对应规格",
+    ].includes(actual)
     ? actual
     : undefined;
 }

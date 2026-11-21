@@ -1,4 +1,4 @@
-/** 精确命令和唯一目录主体规则：不做任意自然语言提词。 */
+/** 精确命令和商品名称或别名的唯一匹配规则：不做任意自然语言提词。 */
 import type { RowDataPacket } from "mysql2/promise";
 import { getDbPool } from "@/lib/repository/db";
 import { normalizeCommandText } from "@/lib/common/text";

@@ -1,9 +1,15 @@
 /* Desktop first-viewport composition for the storefront. Keep each dense panel scrollable. */
 @media (min-width: 861px) {
-  body:has(.shop-home) { overflow: hidden; }
-  body:has(.shop-home) .site-header { min-height: 96px; }
+  body:has(.shop-home) {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  body:has(.shop-home) .site-header { flex: 0 0 auto; min-height: 96px; }
   body:has(.shop-home) .site-main:has(.shop-home) {
-    height: calc(100vh - 96px);
+    flex: 1 1 0;
+    height: auto;
     min-height: 0;
     padding: 18px 0 22px;
     overflow: hidden;

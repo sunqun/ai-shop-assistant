@@ -10,7 +10,7 @@ afterEach(cleanup);
 const fallback = "这项要求暂时还无法全部满足，你可以查看商品详情，接受当前商品的话就确认下单";
 const unknown: ProductDifference = {
   requirement: "佩戴舒适",
-  actual: "商品目录资料无法核实该要求",
+  actual: "现有商品信息无法核实该要求",
   status: "unverified",
 };
 
@@ -25,7 +25,7 @@ describe("assistant difference hints", () => {
   it("uses the agreed price suggestion without inventing a budget", () => {
     show({ ...unknown, requirement: "价格合适" });
     expect(screen.getByText("可以看看上方报价，觉得合适就直接确认下单。")).toBeInTheDocument();
-    expect(screen.queryByText(/商品目录资料无法核实/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/(?:现有商品信息|商品目录资料)无法核实/)).not.toBeInTheDocument();
   });
 
   it("explains an unknown feature without claiming it is absent", () => {
@@ -45,7 +45,13 @@ describe("assistant difference hints", () => {
     expect(screen.getByText("这款商品与你的要求有以上差异。接受这个差异的话，可以确认下单。")).toBeInTheDocument();
   });
 
-  it.each(["商品目录资料无法核实该要求", "目录中缺少可核实的对应规格", ""])(
+  it.each([
+    "现有商品信息无法核实该要求",
+    "商品信息中缺少可核实的对应规格",
+    "商品目录资料无法核实该要求",
+    "目录中缺少可核实的对应规格",
+    "",
+  ])(
     "uses the exact fallback and hides the technical placeholder %s", (actual) => {
       show({ ...unknown, actual });
       expect(screen.getByText(fallback)).toBeInTheDocument();
@@ -64,7 +70,7 @@ describe("assistant difference hints", () => {
     expect(screen.getByText("已确认接受的商品差异")).toBeInTheDocument();
     expect(screen.getByText(/确认时尚无法核实是否符合该要求/)).toBeInTheDocument();
     expect(screen.queryByText(fallback)).not.toBeInTheDocument();
-    expect(screen.queryByText(/商品目录资料无法核实/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/(?:现有商品信息|商品目录资料)无法核实/)).not.toBeInTheDocument();
   });
 
   it("does not invite confirmation again after a task has failed", () => {

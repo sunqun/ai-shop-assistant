@@ -75,7 +75,7 @@ export async function resolveAssistantIntent(
   // 2) 可信上下文规则（指代消解、状态续接等基于当前任务状态的确定性判断）；
   const contextual = resolveSearchContext(text, state);
   if (contextual) return fromRouting(contextual.routing, contextual.intent, contextual.reply);
-  // 3) 目录主体精确匹配（商品/品类名直接命中目录，可视为 new 检索）；
+  // 3) 商品名称或别名精确匹配（在商城商品库中能唯一确定搜索词时，直接发起新搜索）；
   const catalog = await routeExactCatalogSubject(text);
   if (catalog) return catalog;
 

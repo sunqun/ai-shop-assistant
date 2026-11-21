@@ -5,7 +5,7 @@ vi.mock("@/lib/repository/db", () => ({ getDbPool: () => ({ query: mocks.query }
 import { routeExactCatalogSubject, routeExactCommand } from "@/lib/intent/rules";
 
 beforeEach(() => { mocks.query.mockReset(); });
-describe("INT-RULE: 精确命令和唯一目录主体", () => {
+describe("INT-RULE: 精确命令和商品名称或别名的唯一匹配", () => {
   it.each(["确认下单", "確認購買", "  确认下单！  ", "帮我下单", "幫我下單"])("明确完整命令：%s", (query) => {
     expect(routeExactCommand(query)).toMatchObject({ action: "confirm_order", confidence: 1, engine: "rules" });
   });
@@ -28,11 +28,11 @@ describe("INT-RULE: 精确命令和唯一目录主体", () => {
     });
     expect(mocks.query.mock.calls[0][1]).toEqual(["充电宝", "充电宝", "充电宝"]);
   });
-  it.each([{ rows: [] }, { rows: [{ canonical_term: "A" }, { canonical_term: "B" }] }])("零个或多个目录主体不猜测：%j", async ({ rows }) => {
+  it.each([{ rows: [] }, { rows: [{ canonical_term: "A" }, { canonical_term: "B" }] }])("商品名称或别名无法唯一匹配时不猜测：%j", async ({ rows }) => {
     mocks.query.mockResolvedValue([rows]);
     expect(await routeExactCatalogSubject("测试主体")).toBeUndefined();
   });
-  it.each(["它", "刚才那个", "充电宝，至少20000mAh", "耳机？", "a", "长".repeat(61)])("不以指代或复杂请求走精确目录：%s", async (query) => {
+  it.each(["它", "刚才那个", "充电宝，至少20000mAh", "耳机？", "a", "长".repeat(61)])("不以指代或复杂请求直接匹配商品名称或别名：%s", async (query) => {
     expect(await routeExactCatalogSubject(query)).toBeUndefined();
     expect(mocks.query).not.toHaveBeenCalled();
   });
