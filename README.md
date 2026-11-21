@@ -1,6 +1,9 @@
 # AI 商城（交付内容）
-网址：https://ai-shop-assistant-production-c8ca90ba.up.railway.app 
-基于 Next.js App Router 的桌面网页商城，内置 AI 搜索助手与 AI 购物对话页。用户可浏览/搜索商品、查看详情与评论、维护购物车并结账创建订单记录；本期不接入真实支付、物流、发货、退款或售后。
+- 网址：https://ai-shop-assistant-production-c8ca90ba.up.railway.app 
+- 代码地址：
+    商城：https://github.com/sunqun/ai-shop-assistant.git
+    MCP：https://github.com/sunqun/ai-shop-mcp.git
+- 基于 Next.js App Router 的桌面网页商城，内置 AI 搜索助手与 AI 购物对话页。用户可浏览/搜索商品、查看详情与评论、维护购物车并结账创建订单记录；本期不接入真实支付、物流、发货、退款或售后。
 
 ## 功能概览
 
@@ -10,9 +13,6 @@
 - 库存与报价：24 小时库存预留、统一优惠计价（满减 A / 免运 B / AI 折扣 C）。
 - 交接短链：登录用户生成单商品短链，可匿名查看并结账。
 - 订单：创建订单记录并查询本人订单；建单需登录且显式授权。
-
-## 需求调整与疑问（交付内容）
-[`delivery-docs/DECISION.md`](delivery-docs/DECISION.md)。
 
 ## SKILL（交付内容）
 
@@ -27,7 +27,6 @@
 ### 价格计算校验
 - [`delivery-docs/skills/price-audit.md`](delivery-docs/skills/price-audit.md)
 
-
 ## AI Agent 结构化接口（交付内容）
 
 商城提供一组可供外部 AI agent（Claude、ChatGPT、Gemini 等）调用的结构化 HTTP 接口，形式为「附带文档的 API」，复用 `/api/v1/` 下的注册/登录、授权、搜索、加购、报价、下单与支付短链路由。接口以会话 Cookie `ai_shop_session` 鉴权，用户身份取自服务端会话。
@@ -38,15 +37,13 @@
 
 除直接调用结构化 HTTP 接口外，另有独立项目 `ai-shop-mcp` 把这些接口封装为 `shop_*` MCP 工具（登录 / 搜索 / 加购 / 报价 / 下单 / 支付短链 / 评论），供 Cursor、Trae 等 Agent 通过 SSE 协议调用，复用同一套会话 Cookie 鉴权与接口契约。接入步骤与走通案例见 [`delivery-docs/ai-shop/ai-shop-mcp-guide.md`](delivery-docs/ai-shop/ai-shop-mcp-guide.md), 运行流程见 [`delivery-docs/ai-shop/agent-shopping-run.md`](delivery-docs/ai-shop/agent-shopping-run.md)。
 
-## 初始需求文档（交付内容）
+## 其他文档导航
 
-[`docs/v0.1.0`](docs/v0.1.0)文件夹
-
-## AI协调记录（交付内容）
-[`delivery-docs/AI_NOTES.md`](delivery-docs/AI_NOTES.md)
-
-## 意图识别测试案例
-[`delivery-docs/INTENT_TEST.md`](delivery-docs/INTENT_TEST.md)
+- 初始需求与设计：[`docs/v0.1.0/`](docs/v0.1.0/)（需求分析、前后端技术设计、模块拆分）
+- 当前实现方案：[`docs/v0.1-current/`](docs/v0.1-current/)（需求功能清单、前端/后端技术文档）
+- 需求调整与疑问：[`delivery-docs/DECISION.md`](delivery-docs/DECISION.md)
+- AI协调记录：[`delivery-docs/AI_NOTES.md`](delivery-docs/AI_NOTES.md)
+- 意图识别测试案例：[`delivery-docs/INTENT_TEST.md`](delivery-docs/INTENT_TEST.md)
 
 #### 技术栈
 
@@ -105,14 +102,6 @@ npm run dev
 | `lib/cart-client/` | 网页购物车请求与客户端操作封装 |
 | `db/` | 数据库结构与增量迁移 |
 | `testLibrary/` | 自动化用例（`auth` / `domain` / `intent` / `ommerce`） |
-
-## 文档导航
-
-- 初始需求与设计：[`docs/v0.1.0/`](docs/v0.1.0/)（需求分析、前后端技术设计、模块拆分）
-- 当前实现方案：[`docs/v0.1-current/`](docs/v0.1-current/)（需求功能清单、前端/后端技术文档）
-- 交付材料：[`delivery-docs/`](delivery-docs/)（决策记录 `DECISIONS.md`、CI 与计价验证 `GitHub_Actions.md`、AI 协作记录 `AI_NOTES.md`）
-- AI Agent 接口契约：[`delivery-docs/agent-api.md`](delivery-docs/agent-api.md)（供外部 AI agent 调用的结构化 HTTP 接口文档）
-- AI Agent MCP 调用：[`delivery-docs/ai-shop-mcp-guide.md`](delivery-docs/ai-shop-mcp-guide.md)（`ai-shop-mcp` 接入步骤与购物案例）
 
 ## 范围与边界
 
