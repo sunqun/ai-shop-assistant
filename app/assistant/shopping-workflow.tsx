@@ -1,11 +1,10 @@
 import { Bot } from "lucide-react";
 import {
   SHOPPING_PHASE_LABELS,
-  type ShoppingMode,
   type ShoppingPhase,
 } from "@/lib/shop-task/shopping-task-types";
 
-export function ShoppingWorkflow({ mode, phase }: { mode: ShoppingMode; phase?: ShoppingPhase }) {
+export function ShoppingWorkflow({ phase }: { phase?: ShoppingPhase }) {
   return (
     <aside className="agent-test__details" aria-label="流程说明">
       <div className="agent-test__detail-heading">
@@ -14,7 +13,7 @@ export function ShoppingWorkflow({ mode, phase }: { mode: ShoppingMode; phase?: 
         </span>
         <div>
           <strong>购物流程</strong>
-          <small>{mode === "auto" ? "自动下单模式" : "确认后下单模式"}</small>
+          <small>条件符合自动下单，有差异先确认</small>
         </div>
       </div>
       <ol>
@@ -42,11 +41,9 @@ export function ShoppingWorkflow({ mode, phase }: { mode: ShoppingMode; phase?: 
         <li>
           <span>04</span>
           <div>
-            <strong>{mode === "auto" ? "自动创建订单" : "确认订单"}</strong>
+            <strong>创建订单</strong>
             <small>
-              {mode === "auto"
-                ? "报价展示约 3 秒后自动提交，开始创建后不可取消"
-                : "仅在你明确确认后提交"}
+              条件符合自动提交；有差异时，接受当前商品与报价后提交
             </small>
           </div>
         </li>

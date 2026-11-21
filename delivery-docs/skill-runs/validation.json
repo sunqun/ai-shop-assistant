@@ -1,0 +1,53 @@
+{
+  "checked_at_utc": "2026-11-21T06:03:02.399Z",
+  "validator": "Node.js + existing js-yaml; static delivery validation, not the Python quick_validate.py",
+  "official_validator_attempt": {
+    "status": "unavailable",
+    "reason": "ModuleNotFoundError: No module named 'yaml'"
+  },
+  "status": "passed",
+  "project_tests_executed": false,
+  "checks": [
+    {
+      "check": "skill_frontmatter",
+      "path": ".agents/skills/shop-pricing-audit/SKILL.md",
+      "version": "0.2.0",
+      "passed": true,
+      "sha256_utf8_lf": "DE8C87AB0A8B981AE03A05EFB5C606743EF90675E0BF2C8C59BB45D5DBAE0E78"
+    },
+    {
+      "check": "skill_frontmatter",
+      "path": "delivery-docs/skill-versions/shop-pricing-audit/v0.1.0/SKILL.md",
+      "version": "0.1.0",
+      "passed": true,
+      "sha256_utf8_lf": "3BEE7E1665AF8BDD2DC89D2B3D0A2AA4223A4A5586F1E853673F6DCF932D09AB"
+    },
+    {
+      "check": "skill_frontmatter",
+      "path": "delivery-docs/skill-versions/shop-pricing-audit/v0.2.0/SKILL.md",
+      "version": "0.2.0",
+      "passed": true,
+      "sha256_utf8_lf": "DE8C87AB0A8B981AE03A05EFB5C606743EF90675E0BF2C8C59BB45D5DBAE0E78"
+    },
+    {
+      "check": "snapshot_consistency_and_real_difference",
+      "passed": true
+    },
+    {
+      "check": "usage_reports_versions_and_hashes",
+      "actual_static_reviews": 2,
+      "versions": 2,
+      "passed": true
+    },
+    {
+      "check": "local_references_and_version_diff",
+      "markdown_files": 8,
+      "local_links": 34,
+      "passed": true
+    },
+    {
+      "check": "existing_images_unchanged",
+      "passed": true
+    }
+  ]
+}

@@ -17,7 +17,6 @@ describe("INT-MODEL: 模型边界；全部模拟，不访问模型", () => {
     { action: "query_status", query: "刚才那项任务是不是已经取消了" },
     { action: "confirm_order", query: "那麻烦你帮我提交这件商品吧" },
     { action: "cancel_task", query: "那麻烦你停一下刚才的购买流程吧" },
-    { action: "select_product", query: "这件挺好的，选它可以吧" },
     { action: "analyze_reviews", query: "刚才那3条评论还没读完，接着分析吧" },
   ] as const)("非搜索动作$action省略搜索字段，也只调用一次模型", async ({ action, query }) => {
     mocks.invoke.mockImplementation(async (_messages, tools) => ({

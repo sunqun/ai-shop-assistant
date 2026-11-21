@@ -9,6 +9,7 @@ export type {
 
 export {
   searchCatalogProducts,
+  searchShoppingProducts,
   listCatalogProducts,
   listProducts,
   listProductPage,

@@ -37,6 +37,12 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
     ? Math.max(0, Math.ceil((Date.parse(task.commitAfter) - now) / 1000))
     : 0;
   const canCancel = task?.canCancel && !submitting;
+  const quote = task?.quote?.quote;
+  const canRefreshProgress =
+    task &&
+    !task.terminal &&
+    !task.canConfirm &&
+    ["searching", "selecting", "reconciling", "quoting", "committing"].includes(task.phase);
   const showActions = task && (!task.terminal || task.phase === "canceled_link_failed");
 
   return (
@@ -48,32 +54,43 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
               ? "正在创建订单，已停止接受取消…"
               : task.reviewHold
                 ? "已为评论阅读暂停自动提交，阅读后可继续自动流程。"
-                : paused
-                  ? "已恢复任务，点击继续执行后推进流程。"
-                  : task.phase === "ready_to_order"
-                    ? `约 ${seconds} 秒后自动创建订单`
-                    : SHOPPING_PHASE_LABELS[task.phase]}
+                : task.canConfirm
+                  ? "请核对上方商品差异和报价；确认即接受并下单。"
+                  : paused
+                    ? task.canAdvance
+                      ? "已恢复任务，点击继续执行后推进流程。"
+                      : "任务处理中，可刷新进度查看最新结果。"
+                    : task.phase === "ready_to_order"
+                      ? `约 ${seconds} 秒后自动创建订单`
+                      : SHOPPING_PHASE_LABELS[task.phase]}
           </span>
           <div className="agent-test__confirm-actions">
             {canCancel ? (
               <button
                 className="agent-test__cancel"
                 type="button"
-                disabled={canceling}
+                disabled={canceling || connectionLost || !canSend}
                 onClick={() => void cancelToPaymentLink()}
               >
                 {canceling ? <LoaderCircle size={15} /> : <X size={15} />}
                 {canceling ? "正在取消" : "取消并生成短链"}
               </button>
             ) : null}
-            {task.canConfirm && !submitting ? (
+            {task.canConfirm && quote && !submitting ? (
               <button
                 type="button"
-                disabled={canceling || connectionLost}
-                onClick={() => void confirmOrder()}
+                disabled={canceling || connectionLost || !canSend}
+                onClick={() =>
+                  void confirmOrder({ quoteId: quote.quoteId, cartVersion: quote.cartVersion })
+                }
               >
                 <Check size={15} />
                 确认下单
+              </button>
+            ) : null}
+            {canRefreshProgress && !connectionLost ? (
+              <button type="button" onClick={() => void refreshTask()}>
+                刷新进度
               </button>
             ) : null}
             {task.reviewHold && !submitting ? (
@@ -85,7 +102,7 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
                 继续自动流程
               </button>
             ) : null}
-            {paused && !task.reviewHold && !submitting ? (
+            {paused && task.canAdvance && !task.reviewHold && !submitting ? (
               <button type="button" disabled={connectionLost || canceling} onClick={resume}>
                 继续执行
               </button>
@@ -119,7 +136,10 @@ export function AssistantComposer({ controller }: { controller: AssistantControl
             void send(query);
           }
         }}
-        placeholder={task?.dialogue?.pendingSlot?.question || "描述购物需求，或补充当前条件…"}
+        placeholder={
+          (task?.phase === "needs_clarification" && task.dialogue?.pendingSlot?.question) ||
+          "描述购物需求，或补充当前条件…"
+        }
         rows={2}
         disabled={!canSend}
         aria-label="发送消息"

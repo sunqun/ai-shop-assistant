@@ -22,14 +22,13 @@ import { actOnShoppingTask } from "@/lib/shop-task/shopping-task-service";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.task = { taskId: "clarification-task", userid: "fixture-user", query: "大容量快充充电宝", mode: "auto",
+  mocks.task = { taskId: "clarification-task", userid: "fixture-user", query: "大容量快充充电宝",
     phase: "queued", revision: 0, data: {}, commitAfter: null, operationToken: null,
     operationStartedAt: null, activeUser: "fixture-user" };
 });
 
 describe("shopping task clarification", () => {
-  it.each(["manual", "auto"] as const)("finishes %s preparation with a candidate and no order deadline", async (mode) => {
-    mocks.task!.mode = mode;
+  it("finishes unresolved input clarification without an order deadline", async () => {
     const product = { id: "P003", name: "輕量行動電源 10000mAh" } as CatalogProduct;
     const message = "找到10000mAh快充充电宝，请明确容量标准。";
     mocks.prepare.mockResolvedValue({ status: "needs_clarification", product, message });

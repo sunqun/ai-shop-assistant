@@ -16,7 +16,6 @@ import { REVIEW_LEASE_MS } from "@/lib/reviews/types";
 import {
   CANCELLABLE_PHASES,
   TERMINAL_PHASES,
-  type ShoppingMode,
   type ShoppingPhase,
   type ShoppingTask,
   type ShoppingTaskData,
@@ -27,7 +26,7 @@ export class ShoppingTaskError extends Error {
   constructor(
     public readonly code: string,
     message: string,
-    public readonly status = 409
+    public readonly status = 409,
   ) {
     super(message);
   }
@@ -38,7 +37,6 @@ export type TaskRecord = {
   taskId: string;
   userid: string;
   query: string;
-  mode: ShoppingMode;
   phase: ShoppingPhase;
   revision: number;
   data: ShoppingTaskData;
@@ -59,7 +57,6 @@ function fromRow(row: RowDataPacket): TaskRecord {
     taskId: String(row.task_id),
     userid: String(row.userid),
     query: String(row.query_text),
-    mode: row.mode as ShoppingMode,
     phase: row.phase as ShoppingPhase,
     revision: Number(row.revision),
     data: (typeof row.data_json === "string"
@@ -87,22 +84,26 @@ export function taskView(task: TaskRecord): ShoppingTask {
     ...publicData,
     taskId: task.taskId,
     query: task.query,
-    mode: task.mode,
     phase: task.phase,
     revision: task.revision,
     commitAfter: task.commitAfter,
     canCancel: CANCELLABLE_PHASES.includes(task.phase),
-    canConfirm: task.phase === "awaiting_confirmation" && !task.operationToken,
+    canConfirm:
+      task.phase === "awaiting_confirmation" &&
+      !!task.data.product &&
+      !!task.data.quote &&
+      !task.operationToken,
     canAdvance:
-      !(task.data.reviewHold && task.mode === "auto" && task.phase === "ready_to_order") &&
+      !(task.data.reviewHold && task.phase === "ready_to_order") &&
       ((!task.operationToken &&
         ["queued", "ready_to_order", "cancel_pending"].includes(task.phase)) ||
         (stale && !["committing", "reconciling_result"].includes(task.phase))),
-    canRecover: task.phase === "reconciling_result" || (task.phase === "committing" && stale),
+    canRecover:
+      task.phase === "reconciling_result" ||
+      (task.phase === "committing" && stale),
     terminal: TERMINAL_PHASES.includes(task.phase),
     canResumeAfterReviews:
       !!task.data.reviewHold &&
-      task.mode === "auto" &&
       CANCELLABLE_PHASES.includes(task.phase) &&
       !reviewBusy,
   };
@@ -118,20 +119,26 @@ export function isOperationStale(task: TaskRecord): boolean {
 }
 
 // 按 userid + taskId 读取单个任务；不存在则抛 404。
-export async function getTask(userid: string, taskId: string): Promise<TaskRecord> {
+export async function getTask(
+  userid: string,
+  taskId: string,
+): Promise<TaskRecord> {
   const [rows] = await getDbPool().query<RowDataPacket[]>(
     "SELECT * FROM shopping_tasks WHERE task_id = ? AND userid = ?",
-    [taskId, userid]
+    [taskId, userid],
   );
-  if (!rows[0]) throw new ShoppingTaskError("TASK_NOT_FOUND", "购物任务不存在。", 404);
+  if (!rows[0])
+    throw new ShoppingTaskError("TASK_NOT_FOUND", "购物任务不存在。", 404);
   return fromRow(rows[0]);
 }
 
 // 读取用户当前占用的活跃任务（按 active_user 匹配）；没有则返回 null。
-export async function getActiveTask(userid: string): Promise<TaskRecord | null> {
+export async function getActiveTask(
+  userid: string,
+): Promise<TaskRecord | null> {
   const [rows] = await getDbPool().query<RowDataPacket[]>(
     "SELECT * FROM shopping_tasks WHERE active_user = ?",
-    [userid]
+    [userid],
   );
   return rows[0] ? fromRow(rows[0]) : null;
 }
@@ -140,7 +147,7 @@ export async function getActiveTask(userid: string): Promise<TaskRecord | null> 
 export async function updateTask(
   userid: string,
   taskId: string,
-  change: (task: TaskRecord) => void
+  change: (task: TaskRecord) => void,
 ): Promise<TaskRecord> {
   const connection = await getDbPool().getConnection();
   try {
@@ -148,9 +155,10 @@ export async function updateTask(
     // FOR UPDATE 锁定任务行，保证同一任务的并发状态迁移串行化。
     const [rows] = await connection.query<RowDataPacket[]>(
       "SELECT * FROM shopping_tasks WHERE task_id = ? AND userid = ? FOR UPDATE",
-      [taskId, userid]
+      [taskId, userid],
     );
-    if (!rows[0]) throw new ShoppingTaskError("TASK_NOT_FOUND", "购物任务不存在。", 404);
+    if (!rows[0])
+      throw new ShoppingTaskError("TASK_NOT_FOUND", "购物任务不存在。", 404);
     const task = fromRow(rows[0]);
     // 由调用方传入的变更函数在内存中修改任务，随后统一落库。
     change(task);
@@ -168,7 +176,7 @@ export async function updateTask(
         // 终态任务不再占用 active_user，避免阻塞后续任务。
         TERMINAL_PHASES.includes(task.phase) ? null : task.activeUser,
         taskId,
-      ]
+      ],
     );
     await connection.commit();
     return task;
@@ -184,24 +192,22 @@ export async function updateTask(
 export async function createTask(input: {
   userid: string;
   query: string;
-  mode: ShoppingMode;
   idempotencyKey: string;
   data?: ShoppingTaskData;
 }): Promise<TaskRecord> {
   const pool = getDbPool();
   try {
     await pool.execute(
-      `INSERT INTO shopping_tasks (task_id, userid, request_key, mode, query_text, data_json, active_user)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO shopping_tasks (task_id, userid, request_key, query_text, data_json, active_user)
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         randomUUID(),
         input.userid,
         input.idempotencyKey,
-        input.mode,
         input.query,
         JSON.stringify(input.data ?? {}),
         input.userid,
-      ]
+      ],
     );
   } catch (error) {
     // request_key 唯一冲突时忽略，走下方按 request_key 读取已存在任务的幂等路径。
@@ -209,27 +215,36 @@ export async function createTask(input: {
   }
   const [rows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM shopping_tasks WHERE userid = ? AND request_key = ?",
-    [input.userid, input.idempotencyKey]
+    [input.userid, input.idempotencyKey],
   );
   if (!rows[0])
     throw new ShoppingTaskError(
       "ACTIVE_TASK_EXISTS",
-      "已有购物任务正在执行，请先完成或取消当前任务。"
+      "已有购物任务正在执行，请先完成或取消当前任务。",
     );
   const task = fromRow(rows[0]);
   // 同一请求键若对应不同需求，判定为幂等键复用错误。
-  if (task.query !== input.query || task.mode !== input.mode)
-    throw new ShoppingTaskError("IDEMPOTENCY_KEY_REUSED", "同一请求标识不能用于不同购物需求。");
+  if (task.query !== input.query)
+    throw new ShoppingTaskError(
+      "IDEMPOTENCY_KEY_REUSED",
+      "同一请求标识不能用于不同购物需求。",
+    );
   return task;
 }
 
 /** 独立交易入口不能跳过购物任务的取消/提交屏障。 */
-export async function assertNotTaskQuote(userid: string, quoteId: string): Promise<void> {
+export async function assertNotTaskQuote(
+  userid: string,
+  quoteId: string,
+): Promise<void> {
   // 若该报价属于某个购物任务，则禁止绕过任务直接下单，必须走任务确认流程。
   const [rows] = await getDbPool().query<RowDataPacket[]>(
     "SELECT task_id FROM shopping_tasks WHERE userid = ? AND JSON_UNQUOTE(JSON_EXTRACT(data_json, '$.quote.quote.quoteId')) = ? LIMIT 1",
-    [userid, quoteId]
+    [userid, quoteId],
   );
   if (rows.length)
-    throw new ShoppingTaskError("TASK_CONFIRM_REQUIRED", "请通过当前购物任务确认订单。");
+    throw new ShoppingTaskError(
+      "TASK_CONFIRM_REQUIRED",
+      "请通过当前购物任务确认订单。",
+    );
 }

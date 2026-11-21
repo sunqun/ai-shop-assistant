@@ -1,5 +1,5 @@
 export type AppliedPromotion = "A+B" | "B" | "A+B+C" | "B+C";
-export const PRICING_RULE_VERSION = "promotions-2026-11-21-v3";
+export const PRICING_RULE_VERSION = "promotions-2026-11-21-v4";
 export type PricingCandidate = {
   id: AppliedPromotion;
   discountMinor: number;
@@ -54,7 +54,7 @@ export function calculateBestQuote(input: PricingInput): {
   const appliedRules = [
     hasA ? "A：商品金额满 NT$1,000 减 NT$100，每个账号限用一次" : null,
     "B：商品金额满 NT$990 免运费，否则运费 NT$100",
-    hasC ? "C：AI 自动下单，满减后商品金额额外 95 折" : null,
+    hasC ? "C：AI 对话下单（含中途确认），满减后商品金额额外 95 折" : null,
   ].filter((label): label is string => Boolean(label));
   const selected = {
     id,

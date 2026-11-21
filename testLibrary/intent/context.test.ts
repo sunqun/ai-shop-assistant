@@ -33,19 +33,4 @@ describe("INT-CTX: 可信上下文补槽和选品", () => {
   it("更便宜不放宽已有预算", () => {
     expect(resolveSearchContext("再便宜一点", context({ dialogue: dialogue({ intent: intent({ maxPrice: 300 }) }) }))?.intent.maxPrice).toBe(300);
   });
-  it("明确接受仅能消除当前候选的偏好差异", () => {
-    const result = resolveSearchContext("就它吧", context({ dialogue: dialogue({
-      intent: intent({ preferences: ["轻便", "蓝色"] }), unresolvedPreferences: ["轻便"],
-    }) }));
-    expect(result?.routing.action).toBe("select_product");
-    expect(result?.intent.productIds).toEqual([product.id]);
-    expect(result?.intent.preferences).toEqual(["蓝色"]);
-  });
-  it.each([
-    context({ product: undefined }), context({ phase: "ready_to_order" }),
-    context({ dialogue: dialogue({ unresolvedRequired: ["快充未知"] }) }),
-    context({ dialogue: dialogue({ intent: intent({ unresolvedConditions: ["数值未核实"] }) }) }),
-  ])("不得跳过缺候选、错误阶段或必需条件", (state) => {
-    expect(resolveSearchContext("就它吧", state)).toBeUndefined();
-  });
 });

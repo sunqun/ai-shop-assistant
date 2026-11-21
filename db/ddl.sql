@@ -1,6 +1,6 @@
 -- ============================================================
 -- DDL（最终表结构）
--- 由 db/migrations/ 下 14 个迁移合并而来，已按外键依赖重排。
+-- 汇总 db/migrations/ 中截至 015 的最终表结构，已按外键依赖重排。
 -- 执行顺序：先执行本文件，再执行 dml.sql。
 -- 所有 ALTER（加列/删列/改枚举）已内联到最终建表语句中。
 -- ============================================================
@@ -12,6 +12,26 @@ CREATE TABLE IF NOT EXISTS users (
   is_authorized BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS shopping_tasks (
+  task_id CHAR(36) NOT NULL PRIMARY KEY,
+  userid CHAR(36) NOT NULL,
+  request_key CHAR(36) NOT NULL,
+  query_text VARCHAR(1000) NOT NULL,
+  phase VARCHAR(32) NOT NULL DEFAULT 'queued',
+  revision INT UNSIGNED NOT NULL DEFAULT 0,
+  data_json JSON NOT NULL,
+  commit_after DATETIME(3) NULL,
+  operation_token CHAR(36) NULL,
+  operation_started_at DATETIME(3) NULL,
+  active_user CHAR(36) NULL,
+  created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uq_shopping_task_request (userid, request_key),
+  UNIQUE KEY uq_shopping_task_active (active_user),
+  INDEX idx_shopping_task_user (userid, created_at),
+  CONSTRAINT fk_shopping_task_user FOREIGN KEY (userid) REFERENCES users (userid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS categories (

@@ -19,7 +19,7 @@ beforeEach(() => {
     if (sql.includes("FROM order_groups")) return [[]];
     if (sql.includes("FROM users")) return [[{ userid, is_authorized: 1 }]];
     if (sql.includes("FROM carts")) return [[{ source: "WEB", cart_version: 1, expires_at: future }]];
-    if (sql.includes("FROM cart_quotes")) return [[{ cart_version: 1, selected_sku_ids: JSON.stringify(selection), subtotal_minor: 10000, total_minor: 20000, promotion: "B", rule_version: "promotions-2026-11-21-v3", discount_minor: 0, shipping_minor: 10000, shopping_task_id: null, expires_at: future }]];
+    if (sql.includes("FROM cart_quotes")) return [[{ cart_version: 1, selected_sku_ids: JSON.stringify(selection), subtotal_minor: 10000, total_minor: 20000, promotion: "B", rule_version: "promotions-2026-11-21-v4", discount_minor: 0, shipping_minor: 10000, shopping_task_id: null, expires_at: future }]];
     if (sql.includes("FROM cart_items")) return [["a", "b"].map((id) => ({
       sku_id: `sku-${id}`, product_id: id, allocated_quantity: 1, unavailable_quantity: 0,
       reserved_quantity: 1, reservation_status: "ACTIVE", reservation_expires_at: future,

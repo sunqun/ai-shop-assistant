@@ -13,6 +13,32 @@
 import { NextResponse } from "next/server";
 import { readSession } from "@/lib/auth/auth-server";
 import { ShoppingTaskError } from "./shopping-task-store";
+import type { ShoppingTask } from "./shopping-task-types";
+
+/** 动作已执行，但服务端任务明确失败或结果待核对时，不能作为 HTTP 成功返回。 */
+export function shoppingTaskResultResponse<T extends { task?: ShoppingTask | null }>(
+  result: T,
+  successStatus = 200
+): Response {
+  const task = result.task;
+  if (task && ["failed", "canceled_link_failed", "reconciling_result"].includes(task.phase)) {
+    const code = task.errorCode || (
+      task.phase === "reconciling_result" ? "ORDER_RESULT_UNCERTAIN" :
+      task.phase === "canceled_link_failed" ? "PAYMENT_LINK_CREATION_FAILED" :
+      "SHOPPING_TASK_FAILED"
+    );
+    const conflicts = [
+      "QUOTE_EXPIRED", "QUOTE_ALREADY_USED", "QUOTE_REQUIRED", "OUT_OF_STOCK",
+      "CART_CHANGED", "CART_VERSION_CONFLICT", "CART_RESERVATION_EXPIRED",
+    ];
+    const status = code === "AUTHORIZATION_REQUIRED" ? 403 : conflicts.includes(code) ? 409 : 503;
+    return NextResponse.json(
+      { ...result, code, message: task.error || "购物流程未完成，请查看当前任务后重试。" },
+      { status }
+    );
+  }
+  return NextResponse.json(result, { status: successStatus });
+}
 
 // 包装购物任务请求的通用入口：接收一个已注入 userid 的业务回调，返回统一结构的 Response。
 export async function shoppingTaskResponse(

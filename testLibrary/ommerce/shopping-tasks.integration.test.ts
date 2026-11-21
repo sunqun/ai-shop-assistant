@@ -89,13 +89,16 @@ describe.runIf(process.env.SHOPPING_TASK_DB_TEST === "1")(
       }
     });
 
-    async function start(mode: "manual" | "auto" = "auto") {
-      return createShoppingTask({ userid, query: "fixture", mode, idempotencyKey: randomUUID() });
+    async function start() {
+      return createShoppingTask({ userid, query: "fixture", idempotencyKey: randomUUID() });
     }
-    async function ready(mode: "manual" | "auto" = "auto") {
-      const task = await start(mode);
+    async function ready(needsConfirmation = false) {
+      const task = await start();
+      if (needsConfirmation) await updateTask(userid, task.taskId, (current) => {
+        current.data.differences = [{ requirement: "预算100元以内", actual: "商品189元", status: "not_met" }];
+      });
       await actOnShoppingTask(userid, task.taskId, "advance");
-      if (mode === "auto")
+      if (!needsConfirmation)
         await updateTask(userid, task.taskId, (current) => {
           current.commitAfter = new Date(Date.now() - 1).toISOString();
         });
@@ -106,7 +109,7 @@ describe.runIf(process.env.SHOPPING_TASK_DB_TEST === "1")(
       const input = {
         userid,
         query: "fixture",
-        mode: "auto" as const,
+
         idempotencyKey: randomUUID(),
       };
       const first = await createShoppingTask(input);
@@ -120,8 +123,8 @@ describe.runIf(process.env.SHOPPING_TASK_DB_TEST === "1")(
       });
     });
 
-    it("keeps manual mode awaiting explicit confirmation and validates the quote", async () => {
-      const task = await ready("manual");
+    it("keeps disclosed product differences awaiting explicit acceptance and validates the quote", async () => {
+      const task = await ready(true);
       expect((await actOnShoppingTask(userid, task.taskId, "advance")).phase).toBe(
         "awaiting_confirmation"
       );
@@ -268,7 +271,7 @@ describe.runIf(process.env.SHOPPING_TASK_DB_TEST === "1")(
     });
 
     it("blocks legacy confirmations for task-owned quotes", async () => {
-      await ready("manual");
+      await ready(true);
       await expect(assertNotTaskQuote(userid, quote.quote.quoteId)).rejects.toMatchObject({
         code: "TASK_CONFIRM_REQUIRED",
       });
@@ -286,13 +289,13 @@ describe.runIf(process.env.SHOPPING_TASK_DB_TEST === "1")(
       expect(mocks.order).not.toHaveBeenCalled();
     });
 
-    it("enforces authorization on both modes", async () => {
+    it("enforces authorization before conversation task creation", async () => {
       await getDbPool().execute("UPDATE users SET is_authorized = FALSE WHERE userid = ?", [
         userid,
       ]);
       try {
-        await expect(start("manual")).rejects.toMatchObject({ code: "AUTHORIZATION_REQUIRED" });
-        await expect(start("auto")).rejects.toMatchObject({ code: "AUTHORIZATION_REQUIRED" });
+        await expect(start()).rejects.toMatchObject({ code: "AUTHORIZATION_REQUIRED" });
+        await expect(start()).rejects.toMatchObject({ code: "AUTHORIZATION_REQUIRED" });
       } finally {
         await getDbPool().execute("UPDATE users SET is_authorized = TRUE WHERE userid = ?", [
           userid,

@@ -36,6 +36,7 @@ export type McpToolCall<TName extends McpToolName = McpToolName> = {
 };
 
 export type CatalogSearchToolInput = {
+  includeAlternatives?: boolean;
   intent: import("@/lib/catalog").ProductSearchIntent;
   pageSize: number;
   cursor?: string;

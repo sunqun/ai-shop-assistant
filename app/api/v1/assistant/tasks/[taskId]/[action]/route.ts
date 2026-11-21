@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { shoppingTaskResponse } from "@/lib/shop-task/shopping-task-http";
+import { shoppingTaskResponse, shoppingTaskResultResponse } from "@/lib/shop-task/shopping-task-http";
 import { actOnShoppingTask } from "@/lib/shop-task/shopping-task-service";
 
 export const runtime = "nodejs";
@@ -40,7 +40,7 @@ export async function POST(
         );
       confirmation = body.data;
     }
-    return NextResponse.json({
+    return shoppingTaskResultResponse({
       task: await actOnShoppingTask(userid, taskId, parsed.data, confirmation),
     });
   });

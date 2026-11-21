@@ -8,7 +8,6 @@ export type DialogueAction =
   | "new_search"
   | "refine_search"
   | "fill_slot"
-  | "select_product"
   | "confirm_order"
   | "cancel_task"
   | "query_status"

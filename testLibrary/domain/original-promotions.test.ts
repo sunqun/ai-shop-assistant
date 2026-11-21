@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateBestQuote } from "@/lib/pricing-domain";
 
-// 折前商品金额判断门槛，A 限用一次，C 仅自动任务且在 A 满减后计算。
+// 折前商品金额判断门槛，A 限用一次，C 仅对话任务且在 A 满减后计算。
 describe("REQ-A/B/C: 原始优惠边界（金额单位：分）", () => {
   it.each([
     [98999, "WEB", 0, 10000, 108999],
@@ -20,7 +20,7 @@ describe("REQ-A/B/C: 原始优惠边界（金额单位：分）", () => {
     const quote = calculateBestQuote({ subtotalMinor: 100000, source: "WEB", promotionAAvailable: false });
     expect(quote.selected).toMatchObject({ id: "B", discountMinor: 0, shippingMinor: 0, totalMinor: 100000 });
   });
-  it("手动提交即使购物车来源为 AI，也不享受 C", () => {
+  it("未绑定对话任务即使购物车来源为 AI，也不享受 C", () => {
     const quote = calculateBestQuote({ subtotalMinor: 100000, source: "AI", aiSubtotalMinor: 100000, aiOrderEligible: false });
     expect(quote.selected).toMatchObject({ id: "A+B", discountMinor: 10000, totalMinor: 90000 });
   });
@@ -28,7 +28,7 @@ describe("REQ-A/B/C: 原始优惠边界（金额单位：分）", () => {
     const quote = calculateBestQuote({ subtotalMinor: 100000, source: "AI", aiSubtotalMinor: 100000, aiOrderEligible: true, promotionAAvailable: false });
     expect(quote.selected).toMatchObject({ id: "B+C", discountMinor: 5000, shippingMinor: 0, totalMinor: 95000 });
   });
-  it("AI 来源没有服务端自动任务资格时默认不授予 C", () => {
+  it("AI 来源没有服务端对话任务资格时默认不授予 C", () => {
     expect(calculateBestQuote({ subtotalMinor: 50000, source: "AI", aiSubtotalMinor: 50000 }).selected.id).toBe("B");
   });
 });

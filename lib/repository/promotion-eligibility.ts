@@ -14,10 +14,10 @@ export async function promotionAAvailable(connection: PoolConnection, userid: st
 }
 
 // taskId 仅由服务端任务编排传入，不接受客户端或模型声明“享受 C”。
-export async function isAutoShoppingTask(connection: PoolConnection, userid: string, taskId?: string | null) {
+export async function isConversationShoppingTask(connection: PoolConnection, userid: string, taskId?: string | null) {
   if (!taskId) return false;
   const [tasks] = await connection.query<RowDataPacket[]>(
-    "SELECT task_id FROM shopping_tasks WHERE task_id = ? AND userid = ? AND mode = 'auto'",
+    "SELECT task_id FROM shopping_tasks WHERE task_id = ? AND userid = ?",
     [taskId, userid]
   );
   return tasks.length === 1;

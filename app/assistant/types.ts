@@ -2,6 +2,7 @@ import type { CatalogProduct } from "@/lib/catalog";
 import type { ReviewAnalysisReport } from "@/lib/reviews/types";
 
 export type AssistantResult = {
+  differences?: import("@/lib/catalog/types").ProductDifference[];
   status?:
     | "ready_for_confirmation"
     | "ordered"

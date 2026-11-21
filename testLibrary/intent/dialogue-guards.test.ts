@@ -9,9 +9,9 @@ import { handleAssistantMessage } from "@/lib/agent/dialogue-agent";
 import { dialogue, intent, product, routing } from "./fixtures";
 
 const quote = { quoteId: "quote-a", cartVersion: 2 };
-const input = { userid: "fixture-user", query: "确认下单", mode: "manual" as const, idempotencyKey: "key-a", taskId: "task-a", quote };
+const input = { userid: "fixture-user", query: "确认下单", idempotencyKey: "key-a", taskId: "task-a", quote };
 function task(patch: Partial<ShoppingTask> = {}): ShoppingTask {
-  return { taskId: "task-a", query: "找充电宝", mode: "manual", phase: "awaiting_confirmation",
+  return { taskId: "task-a", query: "找充电宝", phase: "awaiting_confirmation",
     revision: 1, commitAfter: null, canCancel: true, canConfirm: true, canAdvance: false,
     canRecover: false, terminal: false, product, dialogue: dialogue(),
     quote: { quote, appliedRules: [] } as unknown as ShoppingTask["quote"], ...patch };

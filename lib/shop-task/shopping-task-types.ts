@@ -2,7 +2,6 @@
  * 购物任务（Shopping Task）的领域类型定义。
  *
  * 集中声明购物任务的状态机相关类型与常量，供 store / service / http 层共享：
- *   - ShoppingMode：交互模式（手动确认 / 自动下单）
  *   - ShoppingPhase：任务生命周期阶段
  *   - ShoppingTaskData：任务承载的业务数据快照（商品/报价/订单/短链/错误）
  *   - ShoppingTask：返回给前端的任务视图（含操作能力位）
@@ -12,10 +11,10 @@
 import type { CatalogProduct } from "@/lib/catalog";
 import type { OrderToolOutput, QuoteToolOutput } from "@/lib/mcp/types";
 import type { DialogueSnapshot } from "@/lib/intent/type";
-import type { ReviewAnalysisProgress, ReviewAnalysisReport } from "@/lib/reviews/types";
-
-// 交互模式：manual 需用户显式确认下单；auto 报价后延时自动提交。
-export type ShoppingMode = "manual" | "auto";
+import type {
+  ReviewAnalysisProgress,
+  ReviewAnalysisReport,
+} from "@/lib/reviews/types";
 
 // 任务生命周期阶段（详见 SHOPPING_PHASE_LABELS 的中文说明）。
 export type ShoppingPhase =
@@ -39,6 +38,15 @@ export type ShoppingPhase =
 
 // 任务在执行过程中逐步写入的业务数据快照（可选字段表示尚未产生）。
 export type ShoppingTaskData = {
+  differences?: import("@/lib/catalog/types").ProductDifference[];
+  acceptedQuote?: {
+    quoteId: string;
+    cartVersion: number;
+    productId: string;
+    quantity: number;
+    differences: import("@/lib/catalog/types").ProductDifference[];
+    acceptedAt: string;
+  };
   product?: CatalogProduct; // 已选商品
   quantity?: number; // 已核实的本次请求件数
   quote?: QuoteToolOutput; // 报价结果
@@ -57,10 +65,9 @@ export type ShoppingTaskData = {
 export type ShoppingTask = Omit<ShoppingTaskData, "reviewProgress"> & {
   taskId: string;
   query: string;
-  mode: ShoppingMode;
   phase: ShoppingPhase;
   revision: number; // 每次状态迁移递增，用于并发/一致性判断
-  commitAfter: string | null; // 自动模式下允许提交的截止时间
+  commitAfter: string | null; // 自动提交的截止时间
   canCancel: boolean; // 当前是否可取消
   canConfirm: boolean; // 当前是否可确认下单
   canAdvance: boolean; // 当前是否可推进
@@ -107,6 +114,6 @@ export const SHOPPING_PHASE_LABELS: Record<ShoppingPhase, string> = {
   canceled_no_product: "已取消；没有可用于生成短链的商品",
   canceled_link_failed: "已停止直接下单，但短链生成失败，可重试",
   failed: "购物流程未完成",
-  needs_clarification: "已找到候选商品，请补充规格或选择当前商品",
+  needs_clarification: "已找到候选商品，请查看商品卡片及待确认条件",
   reconciling_result: "订单结果待核对，请查询原任务，勿重复下单",
 };

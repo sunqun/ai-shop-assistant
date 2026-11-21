@@ -63,7 +63,7 @@ export async function analyzeCurrentProductReviews(input: {
     if (current.data.product?.id !== product.id)
       throw new ShoppingTaskError("REVIEW_PRODUCT_CHANGED", "当前商品已变化，请重新确认商品。");
     const previous = current.data.reviewProgress;
-    if (current.mode === "auto" && CANCELLABLE_PHASES.includes(current.phase))
+    if (CANCELLABLE_PHASES.includes(current.phase))
       current.data.reviewHold = true;
     if (
       previous?.productId === product.id &&

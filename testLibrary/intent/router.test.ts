@@ -32,7 +32,7 @@ describe("INT-ROUTE: 分层短路与搜索准入", () => {
     await resolveAssistantIntent("找一个适合旅行的包", history, state);
     expect(mocks.parse).toHaveBeenCalledExactlyOnceWith("找一个适合旅行的包", history, state);
   });
-  it.each(["chat", "clarify", "analyze_reviews", "query_status", "confirm_order", "cancel_task", "select_product"] as const)("模型一次返回%s，不合并历史或保留夹带的搜索字段", async (action) => {
+  it.each(["chat", "clarify", "analyze_reviews", "query_status", "confirm_order", "cancel_task"] as const)("模型一次返回%s，不合并历史或保留夹带的搜索字段", async (action) => {
     mocks.parse.mockResolvedValue({
       intent: intent({ maxPrice: 100, productIds: ["invented"] }),
       edits: [{ field: "maxPrice", operation: "clear", evidence: "取消预算" }],
@@ -50,13 +50,6 @@ describe("INT-ROUTE: 分层短路与搜索准入", () => {
     const result = await resolveAssistantIntent("模糊的追加要求", [], context());
     expect(isSearchResolution(result)).toBe(false);
     expect(mocks.parse).toHaveBeenCalledTimes(1);
-  });
-  it("模型选品只返回固定引导，不采用模型声称已接受的回复", async () => {
-    mocks.parse.mockResolvedValue({ intent: intent(), decision: { action: "select_product", confidence: 1, reply: "已接受候选并下单" } });
-    const result = await resolveAssistantIntent("这款挺好，选这个可以吧", [], context());
-    expect(result.reply).toContain("明确输入“就这款”");
-    expect(result.reply).not.toContain("已接受候选并下单");
-    expect(isSearchResolution(result)).toBe(false);
   });
   it("闲聊未提供reply时保留默认引导", async () => {
     mocks.parse.mockResolvedValue({ intent: intent(), decision: { action: "chat", confidence: 1 } });
@@ -116,8 +109,5 @@ describe("INT-ROUTE: 分层短路与搜索准入", () => {
   });
   it.each([[0.79, false], [0.8, true], [1, true]])("搜索准入置信度边界 %s", (confidence, allowed) => {
     expect(isSearchResolution({ intent: intent(), routing: routing({ confidence: Number(confidence) }) })).toBe(allowed);
-  });
-  it.each([["state", true], ["llm", false], ["rules", false]] as const)("接受候选仅允许可信上下文规则：%s", (engine, allowed) => {
-    expect(isSearchResolution({ intent: intent(), routing: routing({ action: "select_product", engine }) })).toBe(allowed);
   });
 });

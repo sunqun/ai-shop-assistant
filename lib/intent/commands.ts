@@ -12,7 +12,7 @@ function register(
 }
 
 // 仅完整命令准入；长句、否定、反问和组合请求交给统一模型路由。
-register("confirm_order", ["确认下单", "確認下單", "确认购买", "確認購買"]);
+register("confirm_order", ["确认下单", "確認下單", "确认购买", "確認購買", "帮我下单", "幫我下單", "就它吧", "就它", "选这款", "選這款", "就这款", "就這款", "这款可以", "這款可以"]);
 register("cancel_task", [
   "取消",
   "取消下单",
@@ -81,16 +81,6 @@ const contextCommands = {
     "更便宜的",
     "便宜一点的",
     "便宜一點的",
-  ]),
-  accept: new Set([
-    "就它吧",
-    "就它",
-    "选这款",
-    "選這款",
-    "就这款",
-    "就這款",
-    "这款可以",
-    "這款可以",
   ]),
 };
 export function matchesContextCommand(

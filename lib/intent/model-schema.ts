@@ -62,7 +62,6 @@ const intentArgsSchema = z
       .enum([
         "new_search",
         "refine_search",
-        "select_product",
         "confirm_order",
         "cancel_task",
         "query_status",

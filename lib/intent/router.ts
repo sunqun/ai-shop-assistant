@@ -15,11 +15,10 @@ import type {
 // 所有入口共用的搜索准入；识别出动作不代表调用方获得对应执行权限。
 export function isSearchResolution(resolution: IntentResolution): boolean {
   return (
-    ["new_search", "refine_search", "fill_slot", "select_product"].includes(
+    ["new_search", "refine_search", "fill_slot"].includes(
       resolution.routing.action
     ) &&
-    resolution.routing.confidence >= 0.8 &&
-    (resolution.routing.action !== "select_product" || resolution.routing.engine === "state")
+    resolution.routing.confidence >= 0.8
   );
 }
 
@@ -75,7 +74,7 @@ export async function resolveAssistantIntent(
   if (command) return fromRouting(command);
   // 2) 可信上下文规则（指代消解、状态续接等基于当前任务状态的确定性判断）；
   const contextual = resolveSearchContext(text, state);
-  if (contextual) return fromRouting(contextual.routing, contextual.intent);
+  if (contextual) return fromRouting(contextual.routing, contextual.intent, contextual.reply);
   // 3) 目录主体精确匹配（商品/品类名直接命中目录，可视为 new 检索）；
   const catalog = await routeExactCatalogSubject(text);
   if (catalog) return catalog;
@@ -102,9 +101,7 @@ export async function resolveAssistantIntent(
     intent: decision.action === "new_search" || decision.action === "refine_search"
       ? parsed?.intent ?? emptyIntent()
       : emptyIntent(),
-    reply: decision.action === "select_product"
-      ? "如需接受当前候选，请明确输入“就这款”；未知的必需条件仍需先核实。"
-      : decision.reply || (decision.action === "chat"
+    reply: decision.reply || (decision.action === "chat"
         ? "你可以告诉我想买的商品，也可以接着补充当前需求。"
         : undefined),
     routing,
@@ -114,10 +111,9 @@ export async function resolveAssistantIntent(
     resolution.intent = decision.action === "new_search"
       ? resolution.intent
       : mergeIntent(previous, resolution.intent, parsed?.edits);
-    // 只有可信上下文规则（select_product）可以指定当前候选商品编号；
+    // 模型不能指定当前候选商品编号；
     // 模型输出不允许沿用旧商品编号，避免模型凭空锁定/替换候选。
     delete resolution.intent.productIds;
   }
   return guardSearchConstraints(resolution);
 }
-

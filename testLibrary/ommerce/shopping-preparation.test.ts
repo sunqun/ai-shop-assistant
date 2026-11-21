@@ -36,17 +36,17 @@ vi.mock("@/lib/llm", () => ({
 
 const product = { id: "rank-first", stock: 3 };
 const quote = { quote: { quoteId: "quote-fixture", cartVersion: 2 } };
-const order = { orderGroupId: "actual-order", orders: [{ orderId: "actual-child" }] };
-const input = { query: "coffee", userid: "fixture-user", confirmOrder: false };
+const input = { query: "coffee", userid: "fixture-user" };
 function control(): ShoppingPreparationControl {
   return {
+    shoppingTaskId: "fixture-task",
     signal: new AbortController().signal,
     beforeTool: vi.fn(async () => {}),
     onProgress: vi.fn(async () => {}),
     cartIdempotencyKey: "stable-task-cart-key",
   };
 }
-const final = { name: "final_answer", args: { status: "ordered", message: "fixture" } };
+const final = { name: "final_answer", args: { status: "ready_for_confirmation", message: "fixture" } };
 
 describe("shopping ReAct controlled preparation", () => {
   beforeEach(() => {
@@ -56,21 +56,19 @@ describe("shopping ReAct controlled preparation", () => {
       { name: "select_recommended_product", args: {} },
       { name: "add_selected_to_cart", args: { quantity: 7 } },
       { name: "quote_cart", args: {} },
-      { name: "submit_order", args: {} },
       final,
     ];
     mocks.search.mockResolvedValue({ ok: true, data: { products: [product] }, intent: {} });
     mocks.invokeTool.mockImplementation(async (name: string) => ({
       ok: true,
-      data: name === "reconcile_cart" ? { cartVersion: 2 } : name === "quote_cart" ? quote : order,
+      data: name === "reconcile_cart" ? { cartVersion: 2 } : quote,
     }));
   });
 
   it("defaults to one verified unit and never submits from task-controlled ReAct", async () => {
     const hooks = control();
-    const result = await runShoppingReAct({ ...input, confirmOrder: true, control: hooks });
+    const result = await runShoppingReAct({ ...input, control: hooks });
     expect(result).toMatchObject({ status: "ready_for_confirmation", product, quote });
-    expect(result.order).toBeUndefined();
     expect(mocks.invokeTool).toHaveBeenCalledWith(
       "reconcile_cart",
       { items: [{ id: product.id, quantity: 1 }], idempotencyKey: hooks.cartIdempotencyKey },
@@ -111,12 +109,6 @@ describe("shopping ReAct controlled preparation", () => {
     expect(mocks.invokeTool).not.toHaveBeenCalled();
   });
 
-  it("returns actual legacy order data instead of a model-supplied order status alone", async () => {
-    expect(await runShoppingReAct({ ...input, confirmOrder: true })).toMatchObject({
-      status: "ordered",
-      order,
-    });
-  });
 
   it("rejects model claims of completion without tool evidence", async () => {
     mocks.steps = [final];
@@ -134,22 +126,29 @@ describe("shopping ReAct controlled preparation", () => {
     );
   });
 
-  it("returns a candidate and clarification before any cart or order tool, even with confirmation true", async () => {
-    const clarification = "找到 10000mAh 快充充电宝，请明确大容量的标准。";
-    mocks.search.mockResolvedValue({ ok: true, data: { products: [product], clarification }, intent: {} });
-    const hooks = control();
-    expect(await runShoppingReAct({ ...input, confirmOrder: true, control: hooks })).toMatchObject({
-      status: "needs_clarification", product, message: clarification,
-    });
-    expect(hooks.onProgress).toHaveBeenCalledWith({ clarification });
-    expect(mocks.invokeTool).not.toHaveBeenCalled();
-    expect(mocks.steps).toHaveLength(6);
-  });
 
   it("searches the original request instead of a model rewrite that drops constraints", async () => {
     mocks.steps[0].args = { query: "充电宝" };
     const original = "至少20000mAh、700元以内的充电宝，不要翻新";
     await runShoppingReAct({ ...input, query: original, control: control() });
-    expect(mocks.search).toHaveBeenCalledExactlyOnceWith(original, 100, undefined, undefined, undefined);
+    expect(mocks.search).toHaveBeenCalledExactlyOnceWith(original, 100, undefined, undefined, undefined, true);
+  });
+  it("disclosed preference differences prepare a one-unit quote without model submission", async () => {
+    mocks.search.mockResolvedValue({
+      ok: true,
+      intent: { preferences: ["价格合适"] },
+      data: {
+        products: [product], differences: [{ requirement: "价格合适", actual: "请核对商品单价", status: "unverified" }],
+        clarificationContext: { unresolvedRequired: [], unresolvedPreferences: ["价格合适"] },
+      },
+    });
+    const hooks = control();
+    expect(await runShoppingReAct({ ...input, control: hooks })).toMatchObject({
+      status: "ready_for_confirmation", product, quantity: 1, quote,
+    });
+    expect(hooks.onProgress).toHaveBeenCalledWith(expect.objectContaining({
+      differences: [{ requirement: "价格合适", actual: "请核对商品单价", status: "unverified" }], quantity: 1, dialogue: expect.objectContaining({ unresolvedPreferences: ["价格合适"] }),
+    }));
+    expect(mocks.invokeTool.mock.calls.some(([name]) => name === "submit_order")).toBe(false);
   });
 });

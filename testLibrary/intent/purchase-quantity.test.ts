@@ -23,6 +23,24 @@ describe("BUG-I04: 购买件数核实", () => {
     expect(validatePurchaseQuantity(intent(), "找可以同时给两台设备充电的充电宝").quantity).toBeUndefined();
     expect(validatePurchaseQuantity(intent(), "买可连接2台设备的耳机").quantity).toBeUndefined();
   });
+  it.each([
+    ["找一个价格合适的蓝牙耳机", 1], ["幫我找一個藍牙耳機", 1],
+    ["找两副蓝牙耳机", 2], ["推荐两件耳机", 2],
+  ])("搜索措辞中的明确件数仍可核实：%s", (query, quantity) => {
+    const result = validatePurchaseQuantity(intent({ quantity: Number(quantity) }), String(query));
+    expect(result.quantity).toBe(quantity);
+    expect(result.unresolvedConditions).toEqual([]);
+  });
+  it.each([undefined, 1])("未提数量时允许任务默认1件，模型返回%s不要求补数量", (quantity) => {
+    const result = validatePurchaseQuantity(intent({ quantity }), "找价格合适的蓝牙耳机");
+    expect(result.quantity).toBeUndefined();
+    expect(result.unresolvedConditions).toEqual([]);
+  });
+  it.each(["找3到5个耳机", "至少找3个耳机", "找两副以上耳机"])("搜索数量范围仍需澄清：%s", (query) => {
+    const result = validatePurchaseQuantity(intent(), query);
+    expect(result.quantity).toBeUndefined();
+    expect(result.unresolvedConditions?.length).toBeGreaterThan(0);
+  });
   it("补充搜索继承未撤销的件数，新件数覆盖旧件数", () => {
     expect(mergeIntent(intent({ quantity: 3 }), intent()).quantity).toBe(3);
     expect(mergeIntent(intent({ quantity: 3 }), intent({ quantity: 2 })).quantity).toBe(2);

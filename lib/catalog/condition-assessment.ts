@@ -28,6 +28,7 @@ export type AssessedProduct = {
   unresolvedRequired?: string[];
   unresolvedPreferences?: string[];
   pendingSlot?: NumericDialogueSlot;
+  differences?: import("./types").ProductDifference[];
 };
 
 // LLM 返回的评估结果 schema：逐条给出 productId + conditionId 的 verdict 与证据。
@@ -50,7 +51,7 @@ const assessmentSchema = z
               .strict()
               .optional(),
           })
-          .strict()
+          .strict(),
       )
       .max(2400),
   })
@@ -59,7 +60,8 @@ const assessmentSchema = z
 // 模型只对目录证据做只读语义判断；缺字段、假引用、调用失败均保留为待核实。
 export async function assessCatalogConditions(
   products: CatalogProduct[],
-  intent: ProductSearchIntent
+  intent: ProductSearchIntent,
+  retainMismatches = false,
 ): Promise<AssessedProduct[]> {
   // 合并必选条件与偏好为统一的条件列表；required 标记用于后续是否排除商品。
   const conditions = [
@@ -89,12 +91,15 @@ export async function assessCatalogConditions(
     conditions.flatMap((condition) => {
       const literal = checkLiteralCondition(product, condition.text);
       verdicts.set(`${product.id}/${condition.id}`, literal);
-      return literal === "unknown" ? [{ productId: product.id, conditionId: condition.id }] : [];
-    })
+      return literal === "unknown"
+        ? [{ productId: product.id, conditionId: condition.id }]
+        : [];
+    }),
   );
   if (pending.length) {
     const tool: Tool = {
-      description: "Evaluate each pending condition using only exact catalog evidence.",
+      description:
+        "Evaluate each pending condition using only exact catalog evidence.",
       inputSchema: assessmentSchema,
       execute: async (args) => assessmentSchema.parse(args),
     };
@@ -127,10 +132,12 @@ export async function assessCatalogConditions(
         ],
         { assess_catalog_conditions: tool },
         AbortSignal.timeout(12_000),
-        { toolChoiceName: "assess_catalog_conditions", temperature: 0 }
+        { toolChoiceName: "assess_catalog_conditions", temperature: 0 },
       );
       const parsed = assessmentSchema.parse(result.toolResult);
-      const allowed = new Set(pending.map((item) => `${item.productId}/${item.conditionId}`));
+      const allowed = new Set(
+        pending.map((item) => `${item.productId}/${item.conditionId}`),
+      );
       const seen = new Set<string>();
       for (const item of parsed.assessments) {
         const key = `${item.productId}/${item.conditionId}`;
@@ -143,19 +150,26 @@ export async function assessCatalogConditions(
           continue;
         }
         seen.add(key);
-        const product = products.find((candidate) => candidate.id === item.productId)!;
+        const product = products.find(
+          (candidate) => candidate.id === item.productId,
+        )!;
         if (
           item.verdict === "unknown" &&
           item.slot &&
-          Object.prototype.hasOwnProperty.call(product.specs, item.slot.attribute)
+          Object.prototype.hasOwnProperty.call(
+            product.specs,
+            item.slot.attribute,
+          )
         ) {
           const dimension = normalizeMeasurement(1, item.slot.unit).dimension;
           if (
             readMeasurements(product.specs[item.slot.attribute]).some(
-              (measurement) => measurement.dimension === dimension
+              (measurement) => measurement.dimension === dimension,
             )
           ) {
-            const condition = conditions.find((candidate) => candidate.id === item.conditionId)!;
+            const condition = conditions.find(
+              (candidate) => candidate.id === item.conditionId,
+            )!;
             const bound =
               item.slot.operator === "gte"
                 ? "最低要求"
@@ -194,9 +208,11 @@ export async function assessCatalogConditions(
   return products.flatMap((product) => {
     // 必选条件被判定 contradicted 的商品直接排除。
     if (
+      !retainMismatches &&
       conditions.some(
         (condition) =>
-          condition.required && verdicts.get(`${product.id}/${condition.id}`) === "contradicted"
+          condition.required &&
+          verdicts.get(`${product.id}/${condition.id}`) === "contradicted",
       )
     )
       return [];
@@ -211,7 +227,8 @@ export async function assessCatalogConditions(
       ...conditions
         .filter(
           (condition) =>
-            condition.required && verdicts.get(`${product.id}/${condition.id}`) !== "matched"
+            condition.required &&
+            verdicts.get(`${product.id}/${condition.id}`) !== "matched",
         )
         .map((condition) => condition.text),
       ...(intent.unresolvedConditions ?? []),
@@ -219,19 +236,43 @@ export async function assessCatalogConditions(
     const unresolvedPreferences = conditions
       .filter(
         (condition) =>
-          !condition.required && verdicts.get(`${product.id}/${condition.id}`) !== "matched"
+          !condition.required &&
+          verdicts.get(`${product.id}/${condition.id}`) !== "matched",
       )
       .map((condition) => condition.text);
     const pendingSlot = conditions
-      .filter((condition) => verdicts.get(`${product.id}/${condition.id}`) === "unknown")
+      .filter(
+        (condition) =>
+          verdicts.get(`${product.id}/${condition.id}`) === "unknown",
+      )
       .map((condition) => slots.get(`${product.id}/${condition.id}`))
       .find(Boolean);
     return [
       {
         product,
-        unresolved: [...new Set([...unresolved, ...(intent.unresolvedConditions ?? [])])],
+        unresolved: [
+          ...new Set([...unresolved, ...(intent.unresolvedConditions ?? [])]),
+        ],
         unresolvedRequired,
         unresolvedPreferences,
+        differences: conditions
+          .filter(
+            (condition) =>
+              verdicts.get(`${product.id}/${condition.id}`) !== "matched",
+          )
+          .map((condition) => ({
+            requirement: condition.text,
+            actual:
+              verdicts.get(`${product.id}/${condition.id}`) === "contradicted"
+                ? Object.entries(product.specs)
+                    .map(([name, value]) => `${name}：${value}`)
+                    .join("，") || product.description
+                : "商品目录资料无法核实该要求",
+            status:
+              verdicts.get(`${product.id}/${condition.id}`) === "contradicted"
+                ? ("not_met" as const)
+                : ("unverified" as const),
+          })),
         ...(pendingSlot ? { pendingSlot } : {}),
       },
     ];

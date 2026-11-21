@@ -1,4 +1,4 @@
-import { searchCatalogProducts } from "@/lib/catalog";
+import { searchCatalogProducts, searchShoppingProducts } from "@/lib/catalog";
 import { readProductReviewSnapshot } from "@/lib/catalog/reviews";
 import type { ProductReviewsToolOutput } from "./types";
 import type {
@@ -33,7 +33,11 @@ export async function callCatalogTool(
   }
 
   try {
-    const data = await searchCatalogProducts(input.intent, input.pageSize, input.cursor);
+    if (input.includeAlternatives !== undefined && typeof input.includeAlternatives !== "boolean")
+      return { ok: false, error: { code: "MCP_INVALID_ARGUMENTS", message: "候选查询参数无效。" } };
+    const data = input.includeAlternatives
+      ? await searchShoppingProducts(input.intent)
+      : await searchCatalogProducts(input.intent, input.pageSize, input.cursor);
     return { ok: true, data };
   } catch (error) {
     console.error(

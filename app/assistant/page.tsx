@@ -9,7 +9,7 @@ import "./assistant.css";
 
 export default function AssistantTestPage() {
   const assistant = useAssistant();
-  const { messages, busy, error, mode, setMode, task, send, copyShortLink, reset } = assistant;
+  const { messages, busy, error, task, send, copyShortLink, reset } = assistant;
 
   return (
     <section className="agent-test" aria-label="AI 助手测试">
@@ -22,30 +22,7 @@ export default function AssistantTestPage() {
             在线
           </span>
         </div>
-        <div className="agent-test__mode-bar">
-          <fieldset className="agent-test__modes" disabled={busy}>
-            <legend className="agent-test__mode-legend">交互模式</legend>
-            <label>
-              <input
-                type="radio"
-                name="shopping-mode"
-                value="manual"
-                checked={mode === "manual"}
-                onChange={() => setMode("manual")}
-              />
-              确认后下单
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="shopping-mode"
-                value="auto"
-                checked={mode === "auto"}
-                onChange={() => setMode("auto")}
-              />
-              自动下单
-            </label>
-          </fieldset>
+        <div className="agent-test__header-actions">
           <div className="agent-test__heading-actions">
             <button
               className="agent-test__icon-button"
@@ -75,7 +52,7 @@ export default function AssistantTestPage() {
           {messages.length === 1 && !busy ? (
             <div className="agent-test__suggestions">
               <span>试试这样问</span>
-              {["推荐一款咖啡", "找一个价格合适的蓝牙耳机", "我想买厨房用品"].map((item) => (
+              {["推荐一款咖啡", "找一个价格合适的蓝牙耳机"].map((item) => (
                 <button key={item} type="button" onClick={() => void send(item)}>
                   {item}
                 </button>
@@ -85,7 +62,7 @@ export default function AssistantTestPage() {
           <AssistantComposer controller={assistant} />
         </section>
 
-        <ShoppingWorkflow mode={mode} phase={task?.phase} />
+        <ShoppingWorkflow phase={task?.phase} />
       </div>
     </section>
   );

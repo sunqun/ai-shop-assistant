@@ -4,7 +4,7 @@ import { getDbPool } from "@/lib/repository/db";
 import { deriveUserCartId } from "@/lib/repository/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
 import { calculateBestQuote, lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
-import { promotionAAvailable, isAutoShoppingTask } from "./promotion-eligibility";
+import { promotionAAvailable, isConversationShoppingTask } from "./promotion-eligibility";
 import type { OrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
 
 export class OrderServiceError extends Error {
@@ -51,7 +51,7 @@ type ReservationRow = RowDataPacket & {
 type OrderListRow = RowDataPacket & {
   order_group_id: string;
   source: "WEB" | "AI";
-  submission_mode: "manual" | "auto";
+  shopping_task_id: string | null;
   created_at: Date | string;
   subtotal_minor: number | string;
   discount_minor: number | string;
@@ -67,8 +67,7 @@ type OrderListRow = RowDataPacket & {
 export type UserOrderView = {
   orderGroupId: string;
   source: "WEB" | "AI";
-  // source保留购物车/计价来源；只有自动购物任务才属于自动提交。
-  submissionMode: "manual" | "auto";
+  shoppingTaskId: string | null; // 已核对用户及幂等绑定的对话任务来源。
   createdAt: string;
   subtotalMinor: number;
   discountMinor: number;
@@ -88,7 +87,7 @@ async function assertQuotePromotions(
   // 任务报价不能转用于其他提交入口；资格始终从服务端任务读取。
   if (quote.shopping_task_id && idempotencyKey !== `shopping:${quote.shopping_task_id}:order`)
     throw new OrderServiceError("QUOTE_EXPIRED");
-  const eligibleC = source === "AI" && await isAutoShoppingTask(connection, userid, quote.shopping_task_id);
+  const eligibleC = source === "AI" && await isConversationShoppingTask(connection, userid, quote.shopping_task_id);
   const current = calculateBestQuote({
     subtotalMinor: Number(quote.subtotal_minor), source,
     aiSubtotalMinor: source === "AI" ? Number(quote.subtotal_minor) : 0,
@@ -165,11 +164,10 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
   const pool = getDbPool();
   const [rows] = await pool.query<OrderListRow[]>(
     `SELECT og.order_group_id, og.source, og.created_at,
-            CASE WHEN og.source = 'AI' AND EXISTS (
-              SELECT 1 FROM shopping_tasks st
-               WHERE st.userid = og.userid AND st.mode = 'auto'
-                 AND og.idempotency_key = CONCAT('shopping:', st.task_id, ':order')
-            ) THEN 'auto' ELSE 'manual' END AS submission_mode,
+            (SELECT st.task_id FROM shopping_tasks st
+              WHERE og.source = 'AI' AND st.userid = og.userid
+                AND q.shopping_task_id = st.task_id
+                AND og.idempotency_key = CONCAT('shopping:', st.task_id, ':order') LIMIT 1) AS shopping_task_id,
             q.subtotal_minor, q.discount_minor, q.shipping_minor, q.total_minor,
             o.order_id, oi.sku_id, oi.quantity, oi.unit_price_minor,
             oi.product_name_snapshot AS product_name
@@ -189,7 +187,7 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
       group = {
         orderGroupId: id,
         source: row.source,
-        submissionMode: row.submission_mode === "auto" ? "auto" : "manual",
+        shoppingTaskId: row.shopping_task_id ?? null,
         createdAt: dateValue(row.created_at).toISOString(),
         subtotalMinor: Number(row.subtotal_minor),
         discountMinor: Number(row.discount_minor),

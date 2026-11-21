@@ -6,10 +6,10 @@ import { routeExactCatalogSubject, routeExactCommand } from "@/lib/intent/rules"
 
 beforeEach(() => { mocks.query.mockReset(); });
 describe("INT-RULE: 精确命令和唯一目录主体", () => {
-  it.each(["确认下单", "確認購買", "  确认下单！  "])("明确完整命令：%s", (query) => {
+  it.each(["确认下单", "確認購買", "  确认下单！  ", "帮我下单", "幫我下單"])("明确完整命令：%s", (query) => {
     expect(routeExactCommand(query)).toMatchObject({ action: "confirm_order", confidence: 1, engine: "rules" });
   });
-  it.each(["不要确认下单", "确认下单？", "可以取消吗", "取消了吗", "先不取消", "取消并找耳机", "商品叫确认下单"])("不把否定/询问/组合句当命令：%s", (query) => {
+  it.each(["不要确认下单", "确认下单？", "可以取消吗", "取消了吗", "先不取消", "取消并找耳机", "商品叫确认下单", "不要帮我下单", "帮我下单？", "帮我下单但换个便宜的"])("不把否定/询问/组合句当命令：%s", (query) => {
     expect(routeExactCommand(query)).toBeUndefined();
   });
   it.each(["取消", "取消下单", "不要買了"])("取消精确命令：%s", (query) => {

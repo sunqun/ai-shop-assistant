@@ -13,12 +13,12 @@ const userid = "00000000-0000-4000-8000-000000000001";
 const taskId = "00000000-0000-4000-8000-000000000002";
 let source: "WEB" | "AI";
 let usedA: boolean;
-let autoTask: boolean;
+let conversationTask: boolean;
 let quoteRow: Record<string, unknown>;
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("AUTH_SESSION_SECRET", "fixture-secret-for-cart-id-only");
-  source = "WEB"; usedA = false; autoTask = false;
+  source = "WEB"; usedA = false; conversationTask = false;
   const future = new Date(Date.now() + 60000);
   quoteRow = { quote_id: "quote", cart_version: 1, subtotal_minor: 100000, discount_minor: 10000,
     shipping_minor: 0, total_minor: 90000, promotion: "A+B", rule_version: PRICING_RULE_VERSION,
@@ -27,7 +27,7 @@ beforeEach(() => {
     if (sql.includes("FROM users")) return [[{ userid, is_authorized: 1 }]];
     if (sql.includes("FROM order_groups og")) return [usedA ? [{ order_group_id: "previous-order" }] : []];
     if (sql.includes("FROM order_groups")) return [[]];
-    if (sql.includes("FROM shopping_tasks")) return [autoTask ? [{ task_id: taskId }] : []];
+    if (sql.includes("FROM shopping_tasks")) return [conversationTask ? [{ task_id: taskId }] : []];
     if (sql.includes("FROM carts")) return [[{ source, cart_version: 1, expires_at: future }]];
     if (sql.includes("FROM cart_quotes")) return [[quoteRow]];
     if (sql.includes("FROM cart_items")) return [[{ sku_id: "sku", product_id: "product", allocated_quantity: 1,
@@ -51,15 +51,15 @@ describe("优惠资格与事务核销", () => {
     for (let i = 0; i < 2; i++) expect((await quoteCart({ userid, cartVersion: 1 })).quote.promotion).toBe("A+B");
     expect(mocks.execute.mock.calls.every(([sql]) => sql.startsWith("INSERT INTO cart_quotes"))).toBe(true);
   });
-  it.each([undefined, taskId])("AI 来源的手动报价 %s 不享受 C", async (shoppingTaskId) => {
+  it.each([undefined, taskId])("没有有效对话任务的 AI 来源报价 %s 不享受 C", async (shoppingTaskId) => {
     source = "AI";
     expect((await quoteCart({ userid, cartVersion: 1, expectedSource: source, shoppingTaskId })).quote).toMatchObject({ promotion: "A+B", totalDueMinor: 90000 });
   });
-  it("服务端自动任务报价享受满减后 95 折，并绑定任务", async () => {
-    source = "AI"; autoTask = true;
+  it("服务端对话任务报价享受满减后 95 折，并绑定任务", async () => {
+    source = "AI"; conversationTask = true;
     expect((await quoteCart({ userid, cartVersion: 1, expectedSource: source, shoppingTaskId: taskId })).quote).toMatchObject({ promotion: "A+B+C", totalDueMinor: 85500 });
     expect(mocks.execute.mock.calls[0][1].at(-1)).toBe(taskId);
-    expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining("mode = 'auto'"), [taskId, userid]);
+    expect(mocks.query).toHaveBeenCalledWith(expect.stringContaining("task_id = ? AND userid = ?"), [taskId, userid]);
   });
   it.each(["WEB", "AI"] as const)("%s 下单时发现 A 已被另一笔订单使用，拒绝旧报价并回滚", async (cartSource) => {
     source = cartSource; usedA = true;
@@ -69,14 +69,14 @@ describe("优惠资格与事务核销", () => {
     const queries = mocks.query.mock.calls.map(([sql]) => String(sql));
     expect(queries.findIndex((sql) => sql.includes("FROM users") && sql.includes("FOR UPDATE"))).toBeLessThan(queries.findIndex((sql) => sql.includes("FROM order_groups og")));
   });
-  it("自动任务报价不能在手动提交入口使用", async () => {
-    source = "AI"; autoTask = true;
+  it("对话任务报价不能在独立提交入口使用", async () => {
+    source = "AI"; conversationTask = true;
     Object.assign(quoteRow, { shopping_task_id: taskId, promotion: "A+B+C", discount_minor: 14500, total_minor: 85500 });
-    await expect(submitAiOrder({ userid, cartVersion: 1, quoteId: "quote", idempotencyKey: "manual-key" })).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
+    await expect(submitAiOrder({ userid, cartVersion: 1, quoteId: "quote", idempotencyKey: "independent-key" })).rejects.toMatchObject({ code: "QUOTE_EXPIRED" });
     expect(mocks.execute).not.toHaveBeenCalled();
   });
-  it("自动任务下单再次验证 C 资格并成功核销报价", async () => {
-    source = "AI"; autoTask = true;
+  it("对话任务下单再次验证 C 资格并成功核销报价", async () => {
+    source = "AI"; conversationTask = true;
     Object.assign(quoteRow, { shopping_task_id: taskId, promotion: "A+B+C", discount_minor: 14500, total_minor: 85500 });
     await submitAiOrder({ userid, cartVersion: 1, quoteId: "quote", idempotencyKey: `shopping:${taskId}:order` });
     expect(mocks.execute).toHaveBeenCalledWith(expect.stringContaining("SET consumed_at"), ["quote"]);

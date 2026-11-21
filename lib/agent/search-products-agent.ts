@@ -36,7 +36,8 @@ export async function searchProductsForAgent(
   pageSize: number,
   cursor?: string,
   sessionId?: string,
-  prepared?: SearchResolution
+  prepared?: SearchResolution,
+  includeAlternatives = false
 ): Promise<ProductAgentResult> {
   // 1. 复用或新建会话，历史消息与当前结构化状态分别读取。
   const session = getOrCreateSession(sessionId);
@@ -87,6 +88,7 @@ export async function searchProductsForAgent(
     intent,
     pageSize,
     cursor,
+    ...(includeAlternatives ? { includeAlternatives: true } : {}),
   });
 
   // 6. 工具失败则透传错误码与提示，不写回会话历史。

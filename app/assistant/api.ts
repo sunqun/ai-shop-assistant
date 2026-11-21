@@ -1,5 +1,5 @@
 import { request } from "@/lib/auth/auth-retry";
-import type { ShoppingMode, ShoppingTask } from "@/lib/shop-task/shopping-task-types";
+import type { ShoppingTask } from "@/lib/shop-task/shopping-task-types";
 import type { AssistantMessageResult } from "@/lib/agent/dialogue-agent";
 import type { CatalogReview } from "@/lib/catalog";
 
@@ -8,7 +8,6 @@ const base = "/api/v1/assistant/tasks";
 
 export function sendAssistantMessageRequest(
   query: string,
-  mode: ShoppingMode,
   idempotencyKey: string,
   task?: ShoppingTask | null
 ) {
@@ -17,25 +16,12 @@ export function sendAssistantMessageRequest(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       query,
-      mode,
       idempotencyKey,
       taskId: task?.taskId,
       quote: task?.quote
         ? { quoteId: task.quote.quote.quoteId, cartVersion: task.quote.quote.cartVersion }
         : undefined,
     }),
-  });
-}
-
-export function createShoppingTaskRequest(
-  query: string,
-  mode: ShoppingMode,
-  idempotencyKey: string
-) {
-  return request<TaskResponse>(base, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, mode, idempotencyKey }),
   });
 }
 

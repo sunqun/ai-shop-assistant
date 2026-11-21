@@ -54,10 +54,17 @@ export type NumericSpecConstraint = {
   evidence?: string;
 };
 
+export type ProductDifference = {
+  requirement: string;
+  actual: string;
+  status: "not_met" | "unverified";
+};
+
 export type ProductSearchPage = {
   products: CatalogProduct[];
   nextCursor: string | null;
   clarification?: string;
+  differences?: ProductDifference[];
   clarificationContext?: import("@/lib/intent/type").ClarificationContext;
 };
 

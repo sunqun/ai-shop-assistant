@@ -17,7 +17,6 @@ import { getActiveTask, getTask, taskView } from "@/lib/shop-task/shopping-task-
 import {
   SHOPPING_PHASE_LABELS,
   CANCELLABLE_PHASES,
-  type ShoppingMode,
   type ShoppingTask,
 } from "@/lib/shop-task/shopping-task-types";
 import { analyzeCurrentProductReviews } from "@/lib/reviews/analysis-service";
@@ -33,11 +32,10 @@ export type AssistantMessageResult = {
   pauseTask?: boolean; // 暂停任务自动推进（如评论分析进行中、自动任务暂缓提交）
   reviewAnalysis?: ReviewAnalysisReport; // 评论分析报告，供前端展示口碑结论
 };
-// 对话层输入：用户身份、消息原文、购物模式与幂等键；taskId/quote 用于续接任务或确认下单。
+// 对话层输入：用户身份、消息原文与幂等键；taskId/quote 用于续接任务或确认下单。
 export type AssistantMessageInput = {
   userid: string;
   query: string;
-  mode: ShoppingMode;
   idempotencyKey: string;
   taskId?: string;
   quote?: { quoteId: string; cartVersion: number };
@@ -105,13 +103,13 @@ export async function handleAssistantMessage(
       },
     };
   }
-  // reviews：处理「分析评论」动作。无候选商品时先提示并（自动任务下）暂缓提交；
+  // reviews：处理「分析评论」动作。无候选商品时先提示并暂缓提交；
   // 有候选商品时调用评论分析服务，按 busy/empty/complete 三种结果生成回复。
   const reviews = async (routing: IntentRouting): Promise<AssistantMessageResult> => {
     if (!task?.product) {
       let latest = task;
-      // 自动模式且任务处于可取消阶段时，置 reviewHold 暂停自动提交，等待用户先确定候选商品。
-      if (task?.mode === "auto")
+      // 任务处于可取消阶段时，置 reviewHold 暂停自动提交，等待用户先确定候选商品。
+      if (task)
         latest = taskView(
           await updateTask(input.userid, task.taskId, (current) => {
             if (CANCELLABLE_PHASES.includes(current.phase)) current.data.reviewHold = true;

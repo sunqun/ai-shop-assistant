@@ -3,16 +3,12 @@
 /**
  * AI 购物助手的客户端状态管理 Hook。
  *
- * 负责：登录态感知、消息流、购物任务的恢复/轮询/自动推进、
+ * 负责：登录态感知、消息流、购物任务的恢复/自动推进、
  * 发送消息、确认下单/取消、短链复制等交互，并处理异步竞态与登录切换。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth";
-import {
-  SHOPPING_PHASE_LABELS,
-  type ShoppingMode,
-  type ShoppingTask,
-} from "@/lib/shop-task/shopping-task-types";
+import { SHOPPING_PHASE_LABELS, type ShoppingTask } from "@/lib/shop-task/shopping-task-types";
 import {
   sendAssistantMessageRequest,
   getActiveShoppingTaskRequest,
@@ -25,7 +21,7 @@ import type { ChatMessage } from "./types";
 const INITIAL: ChatMessage[] = [
   {
     role: "assistant",
-    text: "你好，我是AI购物助手。告诉我想买什么，你可以选择确认后下单或自动下单。",
+    text: "你好，我是AI购物助手。告诉我想买什么；条件符合时自动下单，有差异时会先请你确认。",
   },
 ];
 
@@ -35,9 +31,8 @@ export function useAssistant() {
   // ownerRef：保存当前登录用户，供异步回调判断「用户是否已切换」，避免结果串到别人界面。
   const ownerRef = useRef(userid);
   ownerRef.current = userid;
-  // 界面状态：消息流、购物模式、输入框、当前任务与各类进行中标志。
+  // 界面状态：消息流、输入框、当前任务与各类进行中标志。
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL);
-  const [mode, setMode] = useState<ShoppingMode>("manual");
   const [query, setQuery] = useState("");
   const [task, setTask] = useState<ShoppingTask | null>(null);
   const taskRef = useRef<ShoppingTask | null>(null);
@@ -52,8 +47,8 @@ export function useAssistant() {
   // advanceTick：自动推进完成后 +1，用于重新触发自动推进 effect 的评估。
   const [advanceTick, setAdvanceTick] = useState(0);
   const advancing = useRef(false);
-  // creation：创建任务的幂等键；同一 query+mode 复用同一 key，query/mode 变化才重新生成。
-  const creation = useRef<{ query: string; mode: ShoppingMode; key: string } | null>(null);
+  // creation：创建任务的幂等键；同一 query 复用同一 key，query 变化才重新生成。
+  const creation = useRef<{ query: string; key: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // busy：加载中、发送中、恢复中，或存在未终态任务时视为忙碌。
   const busy = loading || starting || restoring || !!(task && !task.terminal);
@@ -68,14 +63,16 @@ export function useAssistant() {
     if (previous?.taskId === next.taskId && previous.revision > next.revision) return;
     taskRef.current = next;
     setTask(next);
-    setMode(next.mode);
+    setError(next.error || "");
     const message: ChatMessage = {
       taskId: next.taskId,
       role: "assistant",
       text: next.clarification || next.error || SHOPPING_PHASE_LABELS[next.phase],
       result: {
         status:
-          next.phase === "ordered" ? "ordered" : next.quote ? "ready_for_confirmation" : undefined,
+          next.phase === "ordered" ? "ordered" : next.phase === "failed" ? "failed" :
+            next.quote ? "ready_for_confirmation" : undefined,
+        differences: next.differences,
         product: next.product,
         quantity: next.quantity ?? 1,
         quote: next.quote,
@@ -182,7 +179,6 @@ export function useAssistant() {
     if (owner !== ownerRef.current || taskRef.current?.taskId !== current.taskId) return;
     if (result.success) {
       acceptTask(result.data.task);
-      setError("");
       setConnectionLost(false);
     } else {
       setConnectionLost(true);
@@ -190,35 +186,13 @@ export function useAssistant() {
     }
   }, [acceptTask]);
 
-  // 非终态任务每 800ms 轮询一次，直到进入终态、断连或组件卸载。
-  const pollingTaskId = task?.taskId;
-  const pollingTerminal = task?.terminal;
-  useEffect(() => {
-    if (!pollingTaskId || pollingTerminal || connectionLost) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      const result = await getShoppingTaskRequest(pollingTaskId);
-      if (disposed) return;
-      if (result.success) {
-        acceptTask(result.data.task);
-        if (!result.data.task.terminal) timer = setTimeout(poll, 800);
-      } else {
-        setConnectionLost(true);
-        setError("进度暂时无法获取，请点击重新连接；不会据此判定订单失败。");
-      }
-    };
-    timer = setTimeout(poll, 800);
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [pollingTaskId, pollingTerminal, connectionLost, acceptTask]);
+  // 操作接口等待处理完成并返回最新任务；恢复页面、断连和手动刷新时按需查询，不周期轮询。
 
   // act：统一执行任务动作（推进/取消/确认/重试短链/恢复下单），并做竞态守卫。
   const act = useCallback(
     async (
-      action: "advance" | "cancel" | "confirm" | "retry-link" | "recover" | "resume-after-reviews"
+      action: "advance" | "cancel" | "confirm" | "retry-link" | "recover" | "resume-after-reviews",
+      confirmation?: { quoteId: string; cartVersion: number }
     ) => {
       const current = taskRef.current;
       const owner = ownerRef.current;
@@ -229,7 +203,7 @@ export function useAssistant() {
         action,
         // 仅确认下单需要带上当前报价，服务端会据此校验报价未过期。
         action === "confirm" && quote
-          ? { cartVersion: quote.cartVersion, quoteId: quote.quoteId }
+          ? (confirmation ?? { cartVersion: quote.cartVersion, quoteId: quote.quoteId })
           : undefined
       );
       // 返回期间用户或任务已切换，丢弃结果。
@@ -237,10 +211,12 @@ export function useAssistant() {
       if (result.success) {
         acceptTask(result.data.task);
         if (action === "resume-after-reviews" && !result.data.task.reviewHold) setPaused(false);
-        setError("");
       } else {
-        setError(result.errorMsg);
+        // 失败后只核对一次状态并暂停自动推进，避免 queued 状态触发连续重试和查询。
+        setPaused(true);
         await refreshTask();
+        if (owner !== ownerRef.current || taskRef.current?.taskId !== current.taskId) return;
+        setError(result.errorMsg);
       }
     },
     [acceptTask, refreshTask]
@@ -276,10 +252,10 @@ export function useAssistant() {
     setStarting(true);
     startingRef.current = true;
     setError("");
-    // 同一 query+mode 复用幂等键，避免重试产生重复任务。
-    if (creation.current?.query !== prompt || creation.current.mode !== mode)
-      creation.current = { query: prompt, mode, key: crypto.randomUUID() };
-    const result = await sendAssistantMessageRequest(prompt, mode, creation.current.key, task);
+    // 同一 query 复用幂等键，避免重试产生重复任务。
+    if (creation.current?.query !== prompt)
+      creation.current = { query: prompt, key: crypto.randomUUID() };
+    const result = await sendAssistantMessageRequest(prompt, creation.current.key, task);
     // 请求期间用户已切换（重新登录），丢弃本次结果。
     if (initiatingUser && initiatingUser !== ownerRef.current) {
       setStarting(false);
@@ -307,15 +283,20 @@ export function useAssistant() {
         ]);
       creation.current = null;
     } else {
-      setError(result.errorMsg);
       // 发送失败时尝试拉回活动任务，避免本地状态与服务端脱节。
-      if (ownerRef.current) {
+      if (taskRef.current) {
+        setPaused(true);
+        await refreshTask();
+      } else if (ownerRef.current) {
         const active = await getActiveShoppingTaskRequest();
+        if (initiatingUser && initiatingUser !== ownerRef.current) return;
         if (active.success && active.data.task) {
           setPaused(true);
           acceptTask(active.data.task);
         }
       }
+      if (initiatingUser && initiatingUser !== ownerRef.current) return;
+      setError(result.errorMsg);
     }
     setStarting(false);
     startingRef.current = false;
@@ -335,11 +316,11 @@ export function useAssistant() {
   }
 
   // 确认下单。
-  async function confirmOrder() {
+  async function confirmOrder(confirmation?: { quoteId: string; cartVersion: number }) {
     if (!taskRef.current?.canConfirm || submitting) return;
     setSubmitting(true);
     try {
-      await act("confirm");
+      await act("confirm", confirmation);
     } finally {
       setSubmitting(false);
     }
@@ -386,8 +367,6 @@ export function useAssistant() {
     canSend,
     error,
     inputRef,
-    mode,
-    setMode,
     task,
     paused,
     canceling,

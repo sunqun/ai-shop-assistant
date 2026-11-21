@@ -105,6 +105,6 @@ describe("pricing domain", () => {
   it("exposes a stable rule version and candidates", () => {
     const quote = calculateBestQuote({ subtotalMinor: 50000, aiSubtotalMinor: 50000, source: "AI", aiOrderEligible: true });
     expect(quote.candidates.map((candidate) => candidate.id)).toEqual(["B+C"]);
-    expect(quote.ruleVersion).toBe("promotions-2026-11-21-v3");
+    expect(quote.ruleVersion).toBe("promotions-2026-11-21-v4");
   });
 });

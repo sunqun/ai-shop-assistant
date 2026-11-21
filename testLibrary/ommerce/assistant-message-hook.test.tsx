@@ -11,7 +11,7 @@ vi.mock("@/app/assistant/api", () => ({
   getActiveShoppingTaskRequest: mocks.active, shoppingTaskActionRequest: mocks.action,
 }));
 const clarified: ShoppingTask = {
-  taskId: "fixture-task", query: "大容量充电宝", mode: "manual", phase: "needs_clarification",
+  taskId: "fixture-task", query: "大容量充电宝", phase: "needs_clarification",
   revision: 1, commitAfter: null, canCancel: false, canConfirm: false, canAdvance: false,
   canRecover: false, terminal: true, clarification: "最低容量是多少？", product,
 };
@@ -26,7 +26,7 @@ describe("INT-UI: 新消息入口及澄清交互", () => {
     const { result } = renderHook(useAssistant);
     await act(async () => {});
     await act(async () => { await result.current.send("大容量充电宝"); });
-    expect(mocks.send).toHaveBeenCalledWith("大容量充电宝", "manual", expect.any(String), null);
+    expect(mocks.send).toHaveBeenCalledWith("大容量充电宝", expect.any(String), null);
     expect(result.current.task?.phase).toBe("needs_clarification");
     expect(result.current.messages.at(-1)?.text).toBe(clarified.clarification);
     expect(result.current.messages.at(-1)?.result?.product?.id).toBe(product.id);
@@ -58,7 +58,7 @@ describe("INT-UI: 新消息入口及澄清交互", () => {
     await act(async () => {});
     await act(async () => { await result.current.send("大容量充电宝"); });
     await act(async () => { await result.current.send("20000mAh"); });
-    expect(mocks.send.mock.calls[1][3]).toEqual(clarified);
+    expect(mocks.send.mock.calls[1][2]).toEqual(clarified);
     expect(result.current.messages.at(-1)?.text).toBe("已收到条件");
   });
 });

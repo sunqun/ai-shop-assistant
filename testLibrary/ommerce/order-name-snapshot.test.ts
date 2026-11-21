@@ -32,23 +32,24 @@ describe("BUG-F02: 订单商品名称快照", () => {
     expect((await listUserOrders(userid))[0].items[0].productName).toBe("[历史商品名称未记录] sku");
   });
   it.each([
-    ["AI", "auto", "auto"],
-    ["AI", "manual", "manual"],
-    ["WEB", "manual", "manual"],
-    ["AI", undefined, "manual"],
-  ] as const)("订单展示区分计价来源%s与提交方式%s", async (source, submissionMode, expected) => {
+    ["AI", "task", "task"],
+    ["AI", null, null],
+    ["WEB", null, null],
+    ["AI", undefined, null],
+  ] as const)("订单展示区分计价来源%s与任务来源%s", async (source, shoppingTaskId, expected) => {
     mocks.query.mockResolvedValue([[{
-      order_group_id: "group", source, submission_mode: submissionMode,
+      order_group_id: "group", source, shopping_task_id: shoppingTaskId,
       created_at: "2026-11-20T00:00:00Z", subtotal_minor: 10000,
       discount_minor: 500, shipping_minor: 0, total_minor: 9500,
       order_id: "order", sku_id: "sku", quantity: 1, unit_price_minor: 10000,
       product_name: "耳机",
     }]]);
     expect((await listUserOrders(userid))[0]).toMatchObject({
-      source, submissionMode: expected, discountMinor: 500, totalMinor: 9500,
+      source, shoppingTaskId: expected, discountMinor: 500, totalMinor: 9500,
     });
     const sql = mocks.query.mock.calls[0][0];
-    expect(sql).toContain("st.userid = og.userid AND st.mode = 'auto'");
+    expect(sql).toContain("st.userid = og.userid");
+    expect(sql).toContain("q.shopping_task_id = st.task_id");
     expect(sql).toContain("og.idempotency_key = CONCAT('shopping:', st.task_id, ':order')");
   });
   it.each(["WEB", "AI"] as const)("%s建单在同一事务插入数量/单价/名称快照", async (source) => {
@@ -57,7 +58,7 @@ describe("BUG-F02: 订单商品名称快照", () => {
       if (sql.includes("FROM order_groups")) return [[]];
       if (sql.includes("FROM users")) return [[{ userid, is_authorized: 1 }]];
       if (sql.includes("FROM carts")) return [[{ cart_id: "cart", source, cart_version: 1, expires_at: future }]];
-      if (sql.includes("FROM cart_quotes")) return [[{ quote_id: "quote", cart_version: 1, subtotal_minor: 30000, total_minor: 40000, promotion: "B", rule_version: "promotions-2026-11-21-v3", discount_minor: 0, shipping_minor: 10000, shopping_task_id: null, expires_at: future, consumed_at: null }]];
+      if (sql.includes("FROM cart_quotes")) return [[{ quote_id: "quote", cart_version: 1, subtotal_minor: 30000, total_minor: 40000, promotion: "B", rule_version: "promotions-2026-11-21-v4", discount_minor: 0, shipping_minor: 10000, shopping_task_id: null, expires_at: future, consumed_at: null }]];
       if (sql.includes("FROM cart_items")) return [[{ sku_id: "sku", product_id: "product", allocated_quantity: 3, unavailable_quantity: 0 }]];
       if (sql.includes("FROM inventory_reservations")) return [[{ sku_id: "sku", reserved_quantity: 3, status: "ACTIVE", expires_at: future, on_hand: 10, reserved: 3 }]];
       throw new Error(`Unexpected query: ${sql}`);
