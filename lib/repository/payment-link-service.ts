@@ -229,12 +229,14 @@ export async function submitPaymentLinkOrder(input: {
       userid: link.ownerId,
       cartVersion: cart.cartVersion,
       expectedSource: "AI",
+      linkCheckout: true,
     });
     const order = await submitAiOrder({
       userid: link.ownerId,
       cartVersion: cart.cartVersion,
       quoteId: quote.quote.quoteId,
       idempotencyKey: `link-order-${input.idempotencyKey}`,
+      linkCheckout: true,
     });
     const [consumed] = await connection.execute<ResultSetHeader>(
       "UPDATE payment_links SET deleted_at = CURRENT_TIMESTAMP WHERE link_id = ? AND deleted_at IS NULL",

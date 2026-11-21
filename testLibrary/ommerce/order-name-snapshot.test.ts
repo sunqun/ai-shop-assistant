@@ -58,7 +58,10 @@ describe("BUG-F02: 订单商品名称快照", () => {
       if (sql.includes("FROM order_groups")) return [[]];
       if (sql.includes("FROM users")) return [[{ userid, is_authorized: 1 }]];
       if (sql.includes("FROM carts")) return [[{ cart_id: "cart", source, cart_version: 1, expires_at: future }]];
-      if (sql.includes("FROM cart_quotes")) return [[{ quote_id: "quote", cart_version: 1, subtotal_minor: 30000, total_minor: 40000, promotion: "B", rule_version: "promotions-2026-11-21-v4", discount_minor: 0, shipping_minor: 10000, shopping_task_id: null, expires_at: future, consumed_at: null }]];
+      if (sql.includes("FROM cart_quotes")) {
+        const ai = source === "AI";
+        return [[{ quote_id: "quote", cart_version: 1, subtotal_minor: 30000, total_minor: ai ? 38500 : 40000, promotion: ai ? "B+C" : "B", rule_version: "promotions-2026-11-21-v4", discount_minor: ai ? 1500 : 0, shipping_minor: 10000, shopping_task_id: null, expires_at: future, consumed_at: null }]];
+      }
       if (sql.includes("FROM cart_items")) return [[{ sku_id: "sku", product_id: "product", allocated_quantity: 3, unavailable_quantity: 0 }]];
       if (sql.includes("FROM inventory_reservations")) return [[{ sku_id: "sku", reserved_quantity: 3, status: "ACTIVE", expires_at: future, on_hand: 10, reserved: 3 }]];
       throw new Error(`Unexpected query: ${sql}`);

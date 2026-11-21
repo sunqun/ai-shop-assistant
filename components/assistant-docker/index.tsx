@@ -354,8 +354,8 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
             ) : null}
             {products.map((product) => (
               <div className="assistant-result" key={product.id}>
-                <span className="assistant-result__content">
-                  <span className="assistant-result__title-row">
+                <div className="assistant-result__content">
+                  <div className="assistant-result__title-row">
                     <span className="assistant-result__title">{product.name}</span>
                     <button
                       type="button"
@@ -364,17 +364,16 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                     >
                       详情
                     </button>
-                  </span>
-                  <div>
-                    <span className="assistant-result__price">
-                      NT${product.price.toLocaleString()}
-                    </span>
-                    <span className="assistant-result__meta">
-                      {product.stock ? ` · 库存 ${product.stock}` : " · 暂时缺货"}
-                    </span>
                   </div>
-                  {/* 数量 + 加购 / 付款 / 生成短链 操作区 */}
-                  <span className="assistant-result__actions">
+                  <div className="assistant-result__summary">
+                    <div className="assistant-result__price-row">
+                      <span className="assistant-result__price">
+                        NT${product.price.toLocaleString()}
+                      </span>
+                      <span className="assistant-result__meta">
+                        {product.stock ? `库存 ${product.stock}` : "暂时缺货"}
+                      </span>
+                    </div>
                     <label className="assistant-quantity">
                       数量
                       <input
@@ -387,9 +386,12 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                         }
                       />
                     </label>
+                  </div>
+                  {/* 加购 / 付款 / 生成短链操作区 */}
+                  <div className="assistant-result__actions">
                     <button
                       type="button"
-                      className="assistant-text-link"
+                      className="assistant-text-link assistant-result__add"
                       onClick={() => void addToCart(product)}
                       disabled={!product.stock || addingId === product.id}
                     >
@@ -415,8 +417,8 @@ export function AssistantDocker({ embedded = false }: { embedded?: boolean }) {
                     >
                       {creatingPaymentLinkId === product.id ? "生成中..." : "生成支付短链"}
                     </button>
-                  </span>
-                </span>
+                  </div>
+                </div>
               </div>
             ))}
             {/* 有下一页游标时显示「加载更多」 */}

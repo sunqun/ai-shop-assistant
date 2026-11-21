@@ -25,6 +25,10 @@ const INITIAL: ChatMessage[] = [
   },
 ];
 
+const CANCELLATION_PHASES: readonly ShoppingTask["phase"][] = [
+  "cancel_pending", "link_creating", "canceled", "canceled_no_product", "canceled_link_failed",
+];
+
 export function useAssistant() {
   const { user, loading } = useAuth();
   const userid = user?.userid;
@@ -57,17 +61,20 @@ export function useAssistant() {
     !loading && !starting && !restoring && !submitting && !canceling && !connectionLost;
 
   // acceptTask：接收最新任务视图，做 revision 防倒退，并同步到消息流与本地缓存。
-  const acceptTask = useCallback((next: ShoppingTask) => {
+  const acceptTask = useCallback((next: ShoppingTask, restoreReview = false) => {
     const previous = taskRef.current;
     // 同一任务里，旧 revision 的响应不回退覆盖新状态。
     if (previous?.taskId === next.taskId && previous.revision > next.revision) return;
     taskRef.current = next;
     setTask(next);
     setError(next.error || "");
+    const cancellation = CANCELLATION_PHASES.includes(next.phase);
     const message: ChatMessage = {
       taskId: next.taskId,
       role: "assistant",
-      text: next.clarification || next.error || SHOPPING_PHASE_LABELS[next.phase],
+      text: cancellation
+        ? next.quote ? "本次购物商品与报价" : "本次购物商品信息"
+        : next.clarification || next.error || SHOPPING_PHASE_LABELS[next.phase],
       result: {
         status:
           next.phase === "ordered" ? "ordered" : next.phase === "failed" ? "failed" :
@@ -78,15 +85,41 @@ export function useAssistant() {
         quote: next.quote,
         order: next.order,
       },
-      shortLink: next.link
-        ? `${window.location.origin}/handoff?token=${encodeURIComponent(next.link.urlToken)}`
-        : undefined,
     };
-    // 同一 taskId 的消息做原地替换，避免重复堆叠。
+    // 普通任务进度原地更新；取消流程独立追加，后续进度/重试更新同一事件消息。
     setMessages((items) => {
-      const index = items.findIndex((item) => item.taskId === next.taskId);
-      if (index < 0) return [...items, message];
-      return items.map((item, position) => (position === index ? message : item));
+      const index = items.findIndex((item) => item.taskId === next.taskId && !item.taskEvent);
+      let updated = items;
+      // 已有商品报价保留在历史位置；恢复取消任务时才补回商品报价摘要。
+      if (!cancellation || (index < 0 && (next.product || next.quote)))
+        updated = index < 0
+          ? [...updated, message]
+          : updated.map((item, position) => (position === index ? message : item));
+      if (restoreReview && next.reviewAnalysis)
+        updated = [...updated, {
+          role: "assistant",
+          text: "已恢复当前商品最近一次评论分析。",
+          reviewAnalysis: next.reviewAnalysis,
+        }];
+      if (cancellation) {
+        const event: ChatMessage = {
+          taskId: next.taskId,
+          taskEvent: "cancellation",
+          role: "assistant",
+          text: next.phase === "canceled_link_failed" && next.error
+            ? next.error
+            : SHOPPING_PHASE_LABELS[next.phase],
+          shortLink: next.link
+            ? `${window.location.origin}/handoff?token=${encodeURIComponent(next.link.urlToken)}`
+            : undefined,
+        };
+        const eventIndex = updated.findIndex((item) =>
+          item.taskId === next.taskId && item.taskEvent === "cancellation");
+        updated = eventIndex < 0
+          ? [...updated, event]
+          : updated.map((item, position) => (position === eventIndex ? event : item));
+      }
+      return updated;
     });
     // 缓存 taskId，便于刷新页面后恢复未完成任务。
     if (ownerRef.current) {
@@ -150,16 +183,7 @@ export function useAssistant() {
               "link_creating",
             ].includes(restored.phase)
         );
-        acceptTask(restored);
-        if (restored.reviewAnalysis)
-          setMessages((items) => [
-            ...items,
-            {
-              role: "assistant",
-              text: "已恢复当前商品最近一次评论分析。",
-              reviewAnalysis: restored.reviewAnalysis,
-            },
-          ]);
+        acceptTask(restored, true);
       }
     })().finally(() => {
       if (!disposed) setRestoring(false);

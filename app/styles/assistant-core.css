@@ -14,7 +14,7 @@
   box-shadow: var(--shadow);
 }
 .assistant-dock__header {
-  padding: 18px;
+  padding: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -37,7 +37,7 @@
   opacity: 0.82;
 }
 .assistant-dock__body {
-  padding: 16px;
+  padding: 10px;
 }
 .assistant-comparison {
   padding: 12px;

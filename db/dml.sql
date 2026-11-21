@@ -4,7 +4,7 @@
 -- 说明：
 --   - products 已按最终表结构直接写入 category_id（原 003 的
 --     UPDATE 映射与 DROP category 已合并进 ddl.sql 与本节）。
---   - product_search_aliases 的 003/004/005 三段合并到本文件，
+--   - product_search_aliases 合并 003/004/005，并包含 016 的通用耳机别名修正，
 --     依靠唯一键 (alias, canonical_term) 用 INSERT IGNORE 去重。
 --   - 007 的 UPDATE carts SET userid 是历史数据回填，对空库无意义，已省略。
 -- ============================================================
@@ -43,8 +43,9 @@ INSERT IGNORE INTO product_search_aliases (alias, canonical_term) VALUES
   ('電源銀行', '行動電源');
 
 INSERT IGNORE INTO product_search_aliases (alias, canonical_term) VALUES
-  ('耳机', '無線藍牙耳機'),
-  ('耳機子', '無線藍牙耳機'),
+  ('耳机', '耳機'),
+  ('耳機', '耳機'),
+  ('耳機子', '耳機'),
   ('蓝牙耳机', '無線藍牙耳機'),
   ('藍牙耳機', '無線藍牙耳機'),
   ('无线耳机', '無線藍牙耳機'),

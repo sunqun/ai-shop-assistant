@@ -82,7 +82,7 @@ describe("assistant inventory refresh", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[1][0]).toBe("/api/v1/products/detail?productId=desk-kit");
-    expect(await screen.findByText("· 库存 4")).toBeInTheDocument();
+    expect(await screen.findByText("库存 4")).toBeInTheDocument();
     expect(await screen.findByText("订单编号：order")).toBeInTheDocument();
   });
 
