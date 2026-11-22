@@ -57,17 +57,15 @@ describe("shopping task initialization", () => {
     expect(mocks.query).not.toHaveBeenCalled();
   });
 
-  it("fresh-install task schema equals the migrated schema without the removed mode column", () => {
+  it("fresh-install shopping_tasks schema drops the removed mode column and orders after users", () => {
     const ddl = readFileSync(new URL("../../db/ddl.sql", import.meta.url), "utf8");
-    const migration = readFileSync(
-      new URL("../../db/migrations/011_create_shopping_tasks.sql", import.meta.url),
-      "utf8"
-    );
-    const normalize = (sql: string) => sql.replace(/\s+/g, " ").trim();
+    const usersStart = ddl.indexOf("CREATE TABLE IF NOT EXISTS users");
+    const tasksStart = ddl.indexOf("CREATE TABLE IF NOT EXISTS shopping_tasks");
+    const categoriesStart = ddl.indexOf("CREATE TABLE IF NOT EXISTS categories");
 
-    expect(normalize(ddl)).toContain(normalize(migration.replace(/^  mode VARCHAR\(10\) NOT NULL,\r?\n/m, "")));
-    expect(ddl.indexOf("CREATE TABLE IF NOT EXISTS shopping_tasks")).toBeGreaterThan(
-      ddl.indexOf("CREATE TABLE IF NOT EXISTS users")
-    );
+    expect(tasksStart).toBeGreaterThan(usersStart);
+    const tasksBlock = ddl.slice(tasksStart, categoriesStart);
+    expect(tasksBlock).toContain("task_id CHAR(36) NOT NULL PRIMARY KEY");
+    expect(tasksBlock).not.toContain("mode");
   });
 });

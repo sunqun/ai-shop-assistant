@@ -1,7 +1,5 @@
 # 后端技术文档
 
-> 本文为 v0.1 实现快照；对话下单流程已由 [v0.2 单一自动流程](../v0.2-unified-shopping/backend-technical.md) 取代。
-
 更新日期：2026-11-21。本文描述当前实现的服务边界、调用链、数据与接口契约，不保留修复日志。
 
 相关文档：[需求功能清单](requirements-list.md)、[前端交互与技术文档](frontend-technical.md)。本次仅整理文档，未执行模型、数据库或自动化用例；代码实现不等同于部署验收。
@@ -147,8 +145,8 @@ handleAssistantMessage读取当前用户活动任务及指定任务，组装商�
 
 ~~~text
 queued → searching → selecting → reconciling → quoting
-  → manual: awaiting_confirmation → committing → ordered
-  → auto: ready_to_order → 到时且未暂停的advance → committing → ordered
+  → 无差异: ready_to_order → 到时且未暂停的advance → committing → ordered
+  → 有差异: awaiting_confirmation → 精确确认或按钮 → committing → ordered
 
 允许取消的阶段 → cancel_pending / link_creating
   → canceled / canceled_no_product / canceled_link_failed
@@ -158,12 +156,14 @@ queued → searching → selecting → reconciling → quoting
 其他失败 → failed
 ~~~
 
-- shopping_tasks持久化用户、模式、query、phase、revision、数据快照、commitAfter和操作租约。
+- shopping_tasks持久化用户、query、phase、revision、数据快照、commitAfter和操作租约；不保存 mode。
 - 状态迁移通过事务/行锁完成；耗时准备或提交在锁外执行，再核对操作标识回写。
 - 当前按用户控制活动任务，revision供前端避免旧结果覆盖。
-- manual等待明确确认；auto的commitAfter约为报价后3秒，需前端发送推进请求；reviewHold阻止自动提交。
+- 无差异时 commitAfter 约为报价后 3 秒，需前端发送推进请求；有差异进入 awaiting_confirmation，无自动提交截止时间，普通 advance 不能提交。
+- 精确命令或按钮须匹配当前任务、quoteId、cartVersion；行锁内保存 acceptedQuote，绑定商品、数量、差异与接受时间，随后取得提交令牌，锁外提交。
 - committing后不接受取消；结果不确定时复用原幂等键核对，不新建订单替代恢复。
 - 取消后有候选则尝试创建单商品短链；稳定的服务端linkId用于恢复，失败可retry-link。
+- reviewHold阻止自动提交；评论分析暂停和恢复不依赖任何交互模式。
 
 ## 6. 购物车、库存、报价与订单
 
@@ -184,13 +184,13 @@ queued → searching → selecting → reconciling → quoting
 - C：AI来源商品金额减5%，运费不折。
 - 现有计算返回一个组合候选；不是遍历任意优惠顺序或候选集合。
 - quoteCart核验来源、购物车版本、实际分配和有效预留；报价有效期为15分钟与预留到期时间的较小值。
-- C是否仅适用于auto、叠加基数和允许组合的最终业务口径为 needs_human_review。
+- C的资格边界、叠加基数和允许组合的最终业务口径为 needs_human_review。
 
 ### 6.3 建单事务与回读
 
 submitWebOrder和submitAiOrder校验当前用户与建单同意、来源、版本、报价和预留，按用户及幂等键复用已保存结果；相同幂等键不同参数拒绝。
 
-建单事务保存订单组、订单项及金额摘要，消费库存预留并扣减on_hand/reserved，报价标记已使用，保存回执和审计来源。任务报价不能绕过任务确认直接通过普通AI提交工具使用。
+建单事务保存订单组、订单项及金额摘要，消费库存预留并扣减on_hand/reserved，报价标记已使用，保存回执和审计来源。订单对话来源使用经用户、报价任务与幂等键共同核实的 shoppingTaskId，不能仅凭 source=AI 推断为对话下单；任务报价不能绕过任务确认直接通过普通AI提交工具使用。
 
 订单查询按userid过滤，返回创建时商品名称快照、SKU、数量和单价及费用摘要；缺失旧名称快照不使用目录现名回填。当前没有完整商品规格历史版本或支付/履约状态机。
 
@@ -225,19 +225,18 @@ submitWebOrder和submitAiOrder校验当前用户与建单同意、来源、版�
 | /api/v1/carts | GET | 当前登录用户WEB购物车。 |
 | /api/v1/carts/reconcile、/quote、/order | POST | WEB购物车同步、报价和建单。 |
 | /api/v1/assistant/search | POST | 只读自然语言搜索，query/pageSize/cursor/sessionId。 |
-| /api/v1/assistant/messages | POST | 登录；query、mode、幂等键，按需携带taskId和quote；返回task/reply/routing等。 |
+| /api/v1/assistant/messages | POST | 登录；query、幂等键，按需携带taskId和quote；返回task/reply/routing等。 |
 | /api/v1/assistant/tasks | GET、POST | 登录；当前活动任务查询和任务创建。 |
 | /api/v1/assistant/tasks/[taskId] | GET | 登录；本人任务状态。 |
 | /api/v1/assistant/tasks/[taskId]/[action] | POST | 登录；advance、cancel、confirm、retry-link、recover、resume-after-reviews。 |
 | /api/v1/assistant/cart/reconcile、/cart/quote、/order | POST | 登录；AI购物车工具能力，遵守领域门禁。 |
-| /api/v1/assistant/react、/react/confirm | POST | 现存ReAct准备/确认兼容入口；不作为网页新消息主入口。 |
 | /api/v1/assistant/payment-links | GET、POST | 登录；本人短链列表和创建。 |
 | /api/v1/assistant/payment-links/[linkId] | DELETE | 登录；本人短链删除。 |
 | /api/v1/handoff | GET、POST | 持令牌匿名读取与现有交接提交路径。 |
 | /api/v1/me/orders、/me/orders/[orderGroupId] | GET | 登录；本人订单列表/单组详情。 |
 | /api/internal/inventory/expire | POST | 内部Bearer密钥；到期预留释放。 |
 
-消息入口限制query为1–1000字符，mode为manual/auto，幂等键和taskId采用UUID。confirm操作提交当前quoteId与cartVersion。常见错误：401未认证、403授权不足、409版本/库存/报价/任务冲突、400参数无效、503服务暂不可用；具体映射由各入口决定。
+消息入口限制query为1–1000字符，幂等键和taskId采用UUID。confirm操作提交当前quoteId与cartVersion。常见错误：401未认证、403授权不足、409版本/库存/报价/任务冲突、400参数无效、503服务暂不可用；具体映射由各入口决定。
 
 ## 10. 数据、部署和边界
 
@@ -246,9 +245,9 @@ submitWebOrder和submitAiOrder校验当前用户与建单同意、来源、版�
 | 用户与目录 | users、categories、products、product_reviews、product_search_aliases |
 | 库存与购物车 | inventory_skus、carts、cart_items、inventory_reservations、inventory_reservation_events、cart_mutations |
 | 报价与订单 | cart_quotes、order_groups、orders、order_items、order_audit_events |
-| 交接与任务 | payment_links、shopping_tasks；任务表结构见db/migrations/011_create_shopping_tasks.sql |
+| 交接与任务 | payment_links、shopping_tasks；任务表结构见db/ddl.sql |
 
-- 建单代码依赖order_items.product_name_snapshot；已有数据库需具备db/migrations/012_snapshot_order_product_names.sql定义的字段。本文不代表该迁移已在目标环境执行。
+- 建单代码依赖order_items.product_name_snapshot；已有数据库需具备db/ddl.sql中order_items.product_name_snapshot字段。本文不代表该字段已在目标环境就绪。
 - 数据库连接由MYSQL_URL/DATABASE_URL或现有MYSQL_*环境配置读取；AUTH_SESSION_SECRET用于会话签名和购物车派生。
 - 库存定时调用需配置INVENTORY_CRON_SECRET与外部调度；意图/分析需现有模型配置。
 - Next开发输出为.next-dev，生产输出为.next，不得合并；排查服务时只操作本项目对应进程和输出目录。

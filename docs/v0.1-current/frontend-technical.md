@@ -1,7 +1,5 @@
 # 前端交互与技术文档
 
-> 本文为 v0.1 实现快照；对话下单流程已由 [v0.2 单一自动流程](../v0.2-unified-shopping/frontend-technical.md) 取代。
-
 更新日期：2026-11-21。本文记录当前桌面网页的页面结构、交互、状态和接口协作，不提出界面改版。
 
 相关文档：[需求功能清单](requirements-list.md)、[后端技术文档](backend-technical.md)。实现依据为当前工作区代码；本次文档整理未执行界面或自动化用例。
@@ -93,18 +91,18 @@
 
 目的：完成单商品多轮需求澄清、选品、报价、任务控制及当前商品评论分析。
 
-- 顶部：在线标识、manual/auto模式切换和重新开始；活动任务期间模式切换和重置受状态限制。
+- 顶部：在线标识和重新开始；活动任务期间重置受状态限制。
 - 主体左列对话区：用户原话、候选、澄清问题、报价、评论报告、订单或短链结果。
-- 报价卡展示任务保存的真实件数、小计、优惠、运费和总额；任务状态、倒计时、取消和确认入口与卡片关联。
+- 有差异时在对话记录展示当前商品、数量、原要求与实际差异，以及小计、优惠、运费和总额；输入框上方显示确认/取消行。
 - 对话底部为输入框及当前操作；消息区独立滚动，输入不随消息列表移出工作区。
-- 右侧270px流程说明，顺序为搜索、选择商品、生成金额、确认或自动创建订单；显示当前阶段。
+- 右侧270px流程说明，顺序为搜索、选择商品、生成金额、确认差异或自动创建订单；显示当前阶段。
 - 评论报告显示读取/分析数量、总量、完整/部分状态、优点/缺点/分歧、原文引用及继续/刷新操作。评论引用不能充当下单指令。
 
 ~~~text
-┌──────── AI在线 ───── 模式：确认后下单 / 自动下单 ── 重新开始 ──┐
+┌──────── AI在线 ─────────────────────── 重新开始 ──┐
 │ 用户原话 → 候选商品 → 澄清问题/报价            │ 购物流程        │
 │ 商品名称 / 规格 / 库存 / 数量                 │ ① 搜索          │
-│ 小计 / 优惠 / 运费 / 总额                     │ ② 选品          │
+│ 差异说明 / 小计 / 优惠 / 运费 / 总额           │ ② 选品          │
 │ 当前状态 / 倒计时 / 确认 / 取消               │ ③ 报价          │
 │ 评论报告 / 读取进度 / 原文引用                │ ④ 建单          │
 │ ────────── 独立滚动的消息区域 ──────────      │ 当前阶段        │
@@ -194,9 +192,9 @@ flowchart TD
   E -->|是| F[显示问题并等待回答]
   F --> A
   E -->|否| G[商品 数量 报价]
-  G --> H{模式}
-  H -->|manual| I[明确确认并携带当前报价]
-  H -->|auto| J[等待commitAfter且未暂停]
+  G --> H{是否有商品差异}
+  H -->|无| I[自动提交窗口 等待commitAfter且未暂停]
+  H -->|有| J[对话显示差异与报价 等待精确确认或按钮]
   I --> K[服务端建单]
   J --> K
   C -->|评论或状态| L[显示报告或进度]
@@ -212,7 +210,7 @@ flowchart TD
 | 目录和详情 | GET /api/v1/products、/categories、/products/detail | products、nextCursor、product、reviews |
 | 普通购物车 | GET /api/v1/carts；POST /carts/reconcile、/carts/quote、/carts/order | allocations、cartVersion、expiresAt、quoteId、费用和订单编号 |
 | 首页助手 | POST /api/v1/assistant/search | query、sessionId、cursor；返回摘要、routing、商品与澄清 |
-| 购物消息 | POST /api/v1/assistant/messages | query、mode、idempotencyKey、taskId、quote；返回task、reply、routing及评论报告 |
+| 购物消息 | POST /api/v1/assistant/messages | query、idempotencyKey、taskId、quote；返回task、reply、routing及评论报告 |
 | 任务 | GET /api/v1/assistant/tasks 与 /tasks/[taskId]；POST /tasks/[taskId]/[action] | revision、phase、能力位、commitAfter、reviewHold |
 | 本人订单/授权 | GET /api/v1/me/orders；POST /api/v1/me/authorization | orders、consent、user |
 | 短链 | GET/POST /api/v1/assistant/payment-links；DELETE /payment-links/[linkId]；GET/POST /api/v1/handoff | linkId、urlToken、product、quantity及交接结果 |

@@ -73,13 +73,13 @@ npm run dev
 
 ## 环境变量
 
-订单记录写入 MySQL，需先按 `db/migrations/` 初始化数据库。生产环境至少需要 `AUTH_SESSION_SECRET`，以及以下任一组 MySQL 连接变量：
+订单记录写入 MySQL，需先按 `db/ddl.sql` + `db/dml.sql` 初始化数据库。生产环境至少需要 `AUTH_SESSION_SECRET`，以及以下任一组 MySQL 连接变量：
 
 - `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_DATABASE`、`MYSQL_USER`、`MYSQL_PASSWORD`
 - Railway 默认变量 `MYSQLHOST`、`MYSQLPORT`、`MYSQLDATABASE`、`MYSQLUSER`、`MYSQLPASSWORD`
 - `MYSQL_URL` 或 `DATABASE_URL`（格式为 `mysql://用户名:密码@主机:端口/数据库名`）
 
-应用优先读取带下划线的变量，其次读取 Railway 变量和连接 URL。`users` 表未初始化时注册接口返回 503；部署后请确认已执行 `db/migrations/` 下全部迁移（先执行 `002_create_products.sql`，再执行 `003_create_categories.sql`）。
+应用优先读取带下划线的变量，其次读取 Railway 变量和连接 URL。`users` 表未初始化时注册接口返回 503；部署后请确认已执行 `db/ddl.sql` 与 `db/dml.sql`。
 
 ## 项目结构
 
@@ -100,7 +100,7 @@ npm run dev
 | `lib/inventory-domain.ts` | 库存请求归一化与可分配数量计算 |
 | `lib/reviews/` | 评论分批分析、报告归纳与进度快照 |
 | `lib/cart-client/` | 网页购物车请求与客户端操作封装 |
-| `db/` | 数据库结构与增量迁移 |
+| `db/` | 数据库结构（`ddl.sql`）与种子数据（`dml.sql`） |
 | `testLibrary/` | 自动化用例（`auth` / `domain` / `intent` / `ommerce`） |
 
 ## 范围与边界
@@ -110,6 +110,6 @@ npm run dev
 - 第三方 AI 助理的远程 MCP 传输、工具发现与外部授权未实现；现有 `lib/mcp/` 工具为进程内调用。已提供会话 Cookie 鉴权的结构化 HTTP 接口（见 [`delivery-docs/agent-api.md`](delivery-docs/agent-api.md)），供 AI agent 以「附带文档的 API」形式调用。
 - 部分业务规则尚未最终确认，标记为 `needs_human_review`，详见 [`delivery-docs/DECISIONS.md`](delivery-docs/DECISIONS.md)。
 
-## 单一对话下单流程（v0.2）
+## 单一对话下单流程
 
-当前 AI 对话统一自动下单，有商品差异时展示差异与完整报价并等待用户接受。当前对话任务（包括中途确认）享有优惠 C；独立网页或短链提交不因此获得资格。运行前按升级要求应用 `db/migrations/015_unified_conversation_tasks.sql`，该文件生成不代表已经执行。详见 [`docs/v0.2-unified-shopping/`](docs/v0.2-unified-shopping/requirements-list.md)。
+当前 AI 对话统一自动下单，有商品差异时展示差异与完整报价并等待用户接受。当前对话任务（包括中途确认）享有优惠 C；独立网页或短链提交不因此获得资格。运行前确保数据库已应用最终 `db/ddl.sql`（shopping_tasks 不含 mode 列）。详见 [`docs/v0.1-current/`](docs/v0.1-current/requirements-list.md)。
