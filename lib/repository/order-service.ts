@@ -4,7 +4,7 @@ import { getDbPool } from "@/lib/repository/db";
 import { deriveUserCartId } from "@/lib/repository/cart-session";
 import { getCatalogProducts } from "@/lib/catalog";
 import { calculateBestQuote, lineSubtotalMinor, toMinor } from "@/lib/pricing-domain";
-import { promotionAAvailable } from "./promotion-eligibility";
+import { promotionAAvailable, promotionCEligible } from "./promotion-eligibility";
 import type { OrderToolOutput, WebOrderToolOutput } from "@/lib/mcp/types";
 
 export class OrderServiceError extends Error {
@@ -82,12 +82,12 @@ function dateValue(value: Date | string) {
 
 async function assertQuotePromotions(
   connection: PoolConnection, userid: string, quote: QuoteRow,
-  source: "WEB" | "AI", idempotencyKey: string, linkCheckout?: boolean
+  source: "WEB" | "AI", idempotencyKey: string, mcpAuthorized?: boolean
 ) {
   // 任务报价不能转用于其他提交入口；资格始终从服务端任务读取。
   if (quote.shopping_task_id && idempotencyKey !== `shopping:${quote.shopping_task_id}:order`)
     throw new OrderServiceError("QUOTE_EXPIRED");
-  const eligibleC = source === "AI" && !linkCheckout;
+  const eligibleC = source === "AI" && (await promotionCEligible(connection, userid, quote.shopping_task_id, mcpAuthorized));
   const current = calculateBestQuote({
     subtotalMinor: Number(quote.subtotal_minor), source,
     aiSubtotalMinor: source === "AI" ? Number(quote.subtotal_minor) : 0,
@@ -376,7 +376,7 @@ export async function submitAiOrder(input: {
   cartVersion: number;
   quoteId: string;
   idempotencyKey: string;
-  linkCheckout?: boolean;
+  mcpAuthorized?: boolean;
 }): Promise<OrderToolOutput> {
   let cartId: string;
   try {
@@ -463,7 +463,7 @@ export async function submitAiOrder(input: {
     );
     if (currentSubtotalMinor !== Number(quote.subtotal_minor))
       throw new OrderServiceError("QUOTE_EXPIRED");
-    await assertQuotePromotions(connection, input.userid, quote, "AI", input.idempotencyKey, input.linkCheckout);
+    await assertQuotePromotions(connection, input.userid, quote, "AI", input.idempotencyKey, input.mcpAuthorized);
     await consumeReservedInventory(connection, cartId, itemRows, input.idempotencyKey);
     const orderGroupId = randomUUID();
     const orderId = randomUUID();

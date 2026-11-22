@@ -10,7 +10,12 @@ const MAX_USERNAME_LENGTH = 191;
 const MAX_PASSWORD_LENGTH = 128;
 
 export async function POST(request: Request) {
-  let body: { username?: unknown; password?: unknown; confirmPassword?: unknown };
+  let body: {
+    username?: unknown;
+    password?: unknown;
+    confirmPassword?: unknown;
+    authorizationConsent?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -34,7 +39,11 @@ export async function POST(request: Request) {
     // Validate this before inserting so a missing production secret cannot
     // create an account that cannot receive a session.
     assertSessionReady();
-    const user = await createUser(username, await hashPassword(password));
+    const user = await createUser(
+      username,
+      await hashPassword(password),
+      body.authorizationConsent === true
+    );
     await setSession(user.userid);
     return NextResponse.json(
       {

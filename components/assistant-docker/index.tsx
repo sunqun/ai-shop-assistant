@@ -18,7 +18,7 @@ import {
   listPaymentLinksRequest,
 } from "./api";
 import { showToast } from "@/lib/toast";
-import { ArrowRight, Bot, Sparkles } from "lucide-react";
+import { ArrowRight, Bot } from "lucide-react";
 import { getProductDetailRequest, searchProductsRequest } from "./api";
 import { PaymentLinks } from "./payment-link";
 import { ProductDetailDialog } from "./product-detail";

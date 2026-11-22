@@ -41,11 +41,15 @@ export async function findUserById(userid: string): Promise<UserRecord | null> {
   return rows.length ? mapUser(rows[0]) : null;
 }
 
-export async function createUser(username: string, passwordHash: string): Promise<UserRecord> {
+export async function createUser(
+  username: string,
+  passwordHash: string,
+  authorizationConsent = false
+): Promise<UserRecord> {
   const userid = randomUUID();
   await getDbPool().execute(
-    "INSERT INTO users (userid, username, password_hash, is_authorized) VALUES (?, ?, ?, FALSE)",
-    [userid, username, passwordHash]
+    "INSERT INTO users (userid, username, password_hash, is_authorized) VALUES (?, ?, ?, ?)",
+    [userid, username, passwordHash, authorizationConsent]
   );
   const user = await findUserById(userid);
   if (!user) throw new Error("created user could not be loaded");

@@ -25,7 +25,7 @@ import type {
 } from "@/lib/mcp/types";
 
 // 交易工具所需的用户上下文：AI 购物车/报价/下单均需要已登录 userid。
-export type CommerceToolContext = { userid?: string; shoppingTaskId?: string };
+export type CommerceToolContext = { userid?: string; shoppingTaskId?: string; mcpAuthorized?: boolean };
 
 // UUID 格式（含版本位与变体位），用于校验 userid 与 quoteId。
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -158,7 +158,7 @@ export async function callCommerceTool(
       }
       return {
         ok: true,
-        data: await quoteCart({ ...input, userid: context.userid, expectedSource: "AI", shoppingTaskId: context.shoppingTaskId }),
+        data: await quoteCart({ ...input, userid: context.userid, expectedSource: "AI", shoppingTaskId: context.shoppingTaskId, mcpAuthorized: context.mcpAuthorized }),
       };
     }
 
@@ -177,7 +177,7 @@ export async function callCommerceTool(
       }
       // 购物任务模式下必须通过任务确认下单，禁止绕过任务直接提交。
       await assertNotTaskQuote(context.userid, input.quoteId);
-      return { ok: true, data: await submitAiOrder({ ...input, userid: context.userid }) };
+      return { ok: true, data: await submitAiOrder({ ...input, userid: context.userid, mcpAuthorized: context.mcpAuthorized }) };
     }
 
     // 兜底：未匹配任何已注册工具（正常情况下由上方白名单提前拦截，此处仅作安全收口）。

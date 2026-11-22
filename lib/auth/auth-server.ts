@@ -72,3 +72,24 @@ export async function clearSession(): Promise<void> {
     maxAge: 0,
   });
 }
+
+const MCP_AUTH_HEADER = "x-mcp-auth-token";
+
+function mcpAuthToken(): string {
+  return process.env.MCP_AUTH_TOKEN?.trim() ?? "";
+}
+
+// 校验来自 ai-shop-mcp 的服务端凭证；该值只存在于 MCP 服务端与商城服务端，
+// 浏览器侧不会持有，因此首页助手无法自报 MCP 来源。未配置时一律拒绝，避免误放 C 资格。
+export function isMcpAuthorized(request: Request): boolean {
+  const expected = mcpAuthToken();
+  if (!expected) return false;
+  const provided = request.headers.get(MCP_AUTH_HEADER);
+  if (!provided) return false;
+  const providedBytes = Buffer.from(provided);
+  const expectedBytes = Buffer.from(expected);
+  return (
+    providedBytes.length === expectedBytes.length &&
+    timingSafeEqual(providedBytes, expectedBytes)
+  );
+}

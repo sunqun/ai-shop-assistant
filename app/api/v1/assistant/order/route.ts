@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { readSession } from "@/lib/auth/auth-server";
+import { readSession, isMcpAuthorized } from "@/lib/auth/auth-server";
 import { callAiSubmitOrderTool } from "@/lib/mcp/tool-calls";
 
 export const runtime = "nodejs";
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       quoteId: body.quoteId,
       idempotencyKey: body.idempotencyKey,
     },
-    { userid: session.userid }
+    { userid: session.userid, mcpAuthorized: isMcpAuthorized(request) }
   );
   if (!result.ok) {
     const status =

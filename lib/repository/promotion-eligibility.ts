@@ -13,13 +13,21 @@ export async function promotionAAvailable(connection: PoolConnection, userid: st
   return used.length === 0;
 }
 
-// taskId 仅由服务端任务编排传入，不接受客户端或模型声明“享受 C”。
-// 暂时停用：C 资格已改为 source === "AI" 即享，不再依赖对话任务绑定。
-// export async function isConversationShoppingTask(connection: PoolConnection, userid: string, taskId?: string | null) {
-//   if (!taskId) return false;
-//   const [tasks] = await connection.query<RowDataPacket[]>(
-//     "SELECT task_id FROM shopping_tasks WHERE task_id = ? AND userid = ?",
-//     [taskId, userid]
-//   );
-//   return tasks.length === 1;
-// }
+// C 资格只在两个服务端可核实来源下成立：
+// 1) 已通过 isMcpAuthorized 校验的 MCP 凭证（ai-shop-mcp 服务端 → 商城服务端）；
+// 2) 绑定到经核实属于当前用户的对话任务（shoppingTaskId）。
+// 不接受客户端或模型声明“享受 C”，不能仅凭 AI 来源授予网页/短链。
+export async function promotionCEligible(
+  connection: PoolConnection,
+  userid: string,
+  taskId?: string | null,
+  mcpAuthorized?: boolean
+) {
+  if (mcpAuthorized === true) return true;
+  if (!taskId) return false;
+  const [tasks] = await connection.query<RowDataPacket[]>(
+    "SELECT task_id FROM shopping_tasks WHERE task_id = ? AND userid = ?",
+    [taskId, userid]
+  );
+  return tasks.length === 1;
+}

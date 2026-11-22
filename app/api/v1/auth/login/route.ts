@@ -20,7 +20,10 @@ export async function POST(request: Request) {
   try {
     const user = await findUserByUsername(username);
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
-      return NextResponse.json({ error: "用户名或密码错误" }, { status: 401 });
+      return NextResponse.json(
+        { code: "INVALID_CREDENTIALS", error: "用户名或密码错误" },
+        { status: 400 }
+      );
     }
     const consent = body.authorizationConsent === true;
     const currentUser = consent && !user.isAuthorized ? await authorizeUser(user.userid) : user;

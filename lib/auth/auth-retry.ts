@@ -43,18 +43,20 @@ export function runWithLoginRetry<T>(action: () => Promise<T>): Promise<T> {
 
 /**
  * 读取并解析接口响应：
- * - 失败（!ok）时抛出 ApiRequestError，优先使用后端返回的 message/code；
+ * - 失败（!ok）时抛出 ApiRequestError，兼容后端返回的 message/error/code；
  * - 成功时把 JSON body 作为泛型 T 返回。
  */
 export async function readApiResponse<T>(response: Response, fallback: string): Promise<T> {
-  let payload: { message?: unknown; code?: unknown } & Record<string, unknown> = {};
+  let payload: { message?: unknown; error?: unknown; code?: unknown } & Record<string, unknown> = {};
   try {
     payload = (await response.json()) as typeof payload;
   } catch {
     // 服务端未返回 JSON（如网关报错页）时，保留 HTTP 状态码继续走错误分支
   }
   if (!response.ok) {
-    const message = typeof payload.message === "string" ? payload.message : fallback;
+    const message = typeof payload.message === "string"
+      ? payload.message
+      : typeof payload.error === "string" ? payload.error : fallback;
     throw new ApiRequestError(
       message,
       response.status,
@@ -69,22 +71,28 @@ export type RequestResult<T> =
   | { success: true; data: T }
   | { success: false; errorMsg: string; data?: T };
 
+type RequestOptions = { retryOnUnauthorized?: boolean };
+
 /**
  * 客户端 fetch 请求封装，统一返回 { success, data | errorMsg }：
  * - 成功：{ success: true, data: T }
  * - 失败（业务错误、401 取消登录、网络错误）：{ success: false, errorMsg: string }
- * 鉴权依赖 httpOnly Cookie 会话，浏览器自动携带；401 会触发登录弹窗并自动重试。
+ * 业务请求的 401 会触发登录弹窗并自动重试；登录/注册请求关闭该行为，避免等待自身登录成功。
  * 失败时会直接调用 showToast 弹出错误提示。
  */
 export async function request<T = unknown>(
   url: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  options: RequestOptions = {}
 ): Promise<RequestResult<T>> {
   try {
-    const data = await runWithLoginRetry(async () => {
+    const performRequest = async () => {
       const response = await fetch(url, { cache: "no-store", ...init });
       return readApiResponse<T>(response, "请求失败");
-    });
+    };
+    const data = options.retryOnUnauthorized === false
+      ? await performRequest()
+      : await runWithLoginRetry(performRequest);
     return { success: true, data };
   } catch (error) {
     const errorMsg = error instanceof ApiRequestError ? error.message : "网络请求失败";

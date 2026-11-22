@@ -81,9 +81,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (
       username: string,
       password: string,
-      confirmPassword: string
+      confirmPassword: string,
+      authorizationConsent: boolean
     ): Promise<RequestResult<AuthUser>> => {
-      const result = await registerRequest(username, password, confirmPassword);
+      const result = await registerRequest(
+        username,
+        password,
+        confirmPassword,
+        authorizationConsent
+      );
       if (!result.success) return { success: false, errorMsg: result.errorMsg };
       setUser(result.data.user);
       setLoginOpen(false);

@@ -5,7 +5,7 @@ import { getDbPool } from "@/lib/repository/db";
 import { calculateBestQuote, lineSubtotalMinor } from "@/lib/pricing-domain";
 import { getCatalogProducts } from "@/lib/catalog";
 import type { QuoteToolOutput } from "@/lib/mcp/types";
-import { promotionAAvailable } from "./promotion-eligibility";
+import { promotionAAvailable, promotionCEligible } from "./promotion-eligibility";
 
 type CartRow = RowDataPacket & {
   cart_id: string;
@@ -46,7 +46,7 @@ export async function quoteCart(input: {
   expectedSource?: "WEB" | "AI";
   selectedSkuIds?: string[];
   shoppingTaskId?: string;
-  linkCheckout?: boolean;
+  mcpAuthorized?: boolean;
 }): Promise<QuoteToolOutput> {
   let cartId: string;
   try {
@@ -102,7 +102,7 @@ export async function quoteCart(input: {
       subtotalMinor += lineSubtotalMinor(product.price, Number(item.allocated_quantity));
     }
     const availableA = await promotionAAvailable(connection, input.userid);
-    const eligibleC = cart.source === "AI" && !input.linkCheckout;
+    const eligibleC = cart.source === "AI" && (await promotionCEligible(connection, input.userid, input.shoppingTaskId, input.mcpAuthorized));
     const quote = calculateBestQuote({
       subtotalMinor,
       source: cart.source,

@@ -10,25 +10,34 @@ export function loginRequest(
   password: string,
   authorizationConsent: boolean
 ): Promise<RequestResult<{ user: AuthUser }>> {
-  return request<{ user: AuthUser }>("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ username, password, authorizationConsent }),
-  });
+  return request<{ user: AuthUser }>(
+    "/api/v1/auth/login",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ username, password, authorizationConsent }),
+    },
+    { retryOnUnauthorized: false }
+  );
 }
 
 export function registerRequest(
   username: string,
   password: string,
-  confirmPassword: string
+  confirmPassword: string,
+  authorizationConsent: boolean
 ): Promise<RequestResult<{ user: AuthUser }>> {
-  return request<{ user: AuthUser }>("/api/v1/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ username, password, confirmPassword }),
-  });
+  return request<{ user: AuthUser }>(
+    "/api/v1/auth/register",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ username, password, confirmPassword, authorizationConsent }),
+    },
+    { retryOnUnauthorized: false }
+  );
 }
 
 export function logoutRequest(): Promise<RequestResult<void>> {

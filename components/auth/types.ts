@@ -9,7 +9,7 @@ export type AuthContextValue = {
   openLogin: () => void;
   closeLogin: () => void;
   login: (username: string, password: string, authorizationConsent: boolean) => Promise<RequestResult<AuthUser>>;
-  register: (username: string, password: string, confirmPassword: string) => Promise<RequestResult<AuthUser>>;
+  register: (username: string, password: string, confirmPassword: string, authorizationConsent: boolean) => Promise<RequestResult<AuthUser>>;
   logout: () => Promise<RequestResult<void>>;
   authorize: () => Promise<RequestResult<AuthUser>>;
 };

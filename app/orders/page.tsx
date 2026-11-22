@@ -12,7 +12,9 @@ import { OrderCard } from "./orderCard";
 export default function OrdersPage() {
   const router = useRouter();
   const { user, loading: authLoading, openLogin, authorize } = useAuth();
+  const userId = user?.userid ?? null;
   const [orders, setOrders] = useState<UserOrderView[]>([]);
+  const [ordersUserId, setOrdersUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -34,15 +36,25 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
+    if (!userId) {
+      setOrders([]);
+      setOrdersUserId(null);
+      setExpandedOrders({});
       setLoading(false);
       return;
     }
     let active = true;
+    setOrders([]);
+    setOrdersUserId(null);
+    setExpandedOrders({});
+    setLoading(true);
     getOrdersRequest()
       .then((result) => {
         if (!active) return;
-        if (result.success) setOrders(result.data.orders);
+        if (result.success) {
+          setOrders(result.data.orders);
+          setOrdersUserId(userId);
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -50,12 +62,14 @@ export default function OrdersPage() {
     return () => {
       active = false;
     };
-  }, [user, authLoading]);
+  }, [userId, authLoading]);
+
+  const visibleOrders = userId === ordersUserId ? orders : [];
 
   return (
     <div className="orders-page">
       <header className="orders-heading">
-        <p className="muted">{user ? `${orders.length} 笔订单` : "登录后查看订单"}</p>
+        <p className="muted">{user ? `${visibleOrders.length} 笔订单` : "登录后查看订单"}</p>
         <button className="button button--ghost" type="button" onClick={() => router.push("/")}>
           去购物
         </button>
@@ -83,7 +97,7 @@ export default function OrdersPage() {
           </button>
         </div>
       ) : null}
-      {!authLoading && user && !loading && orders.length === 0 ? (
+      {!authLoading && user && !loading && visibleOrders.length === 0 ? (
         <PlaceholderCard
           title="还没有订单记录"
           description="创建订单后，记录会显示在这里。"
@@ -91,9 +105,9 @@ export default function OrdersPage() {
           actionLabel="去逛商品"
         />
       ) : null}
-      {orders.length ? (
+      {visibleOrders.length ? (
         <section className="orders-grid" aria-label="订单列表">
-          {orders.map((order) => (
+          {visibleOrders.map((order) => (
             <OrderCard
               key={order.orderGroupId}
               order={order}

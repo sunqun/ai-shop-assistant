@@ -28,7 +28,7 @@ export function LoginDialog() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      if (mode === "register") await register(username, password, confirmPassword);
+      if (mode === "register") await register(username, password, confirmPassword, consent);
       else await login(username, password, consent);
     } finally {
       setSubmitting(false);
@@ -81,17 +81,27 @@ export function LoginDialog() {
             />
           </div>
           {mode === "register" ? (
-            <div className="field">
-              <label htmlFor="register-confirm-password">确认密码</label>
-              <input
-                id="register-confirm-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                type="password"
-                autoComplete="new-password"
-                required
-              />
-            </div>
+            <>
+              <div className="field">
+                <label htmlFor="register-confirm-password">确认密码</label>
+                <input
+                  id="register-confirm-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(event) => setConsent(event.target.checked)}
+                />{" "}
+                <span>同意 AI 助手代为创建订单记录</span>
+              </label>
+            </>
           ) : (
             <label className="checkbox-row">
               <input
@@ -115,7 +125,9 @@ export function LoginDialog() {
             className="auth-mode-switch"
             type="button"
             onClick={() => {
-              setMode(mode === "login" ? "register" : "login");
+              const nextMode = mode === "login" ? "register" : "login";
+              setMode(nextMode);
+              setConsent(true);
               setConfirmPassword("");
             }}
           >
