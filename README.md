@@ -103,13 +103,4 @@ npm run dev
 | `db/` | 数据库结构（`ddl.sql`）与种子数据（`dml.sql`） |
 | `testLibrary/` | 自动化用例（`auth` / `domain` / `intent` / `ommerce`） |
 
-## 范围与边界
 
-- 仅桌面浏览器网页，不包含手机/平板适配。
-- 未接入真实支付渠道；“付款”仅创建并持久化订单记录，不扣款、不发货、不退款。
-- 第三方 AI 助理的远程 MCP 传输、工具发现与外部授权未实现；现有 `lib/mcp/` 工具为进程内调用。已提供会话 Cookie 鉴权的结构化 HTTP 接口（见 [`delivery-docs/agent-api.md`](delivery-docs/agent-api.md)），供 AI agent 以「附带文档的 API」形式调用。
-- 部分业务规则尚未最终确认，标记为 `needs_human_review`，详见 [`delivery-docs/DECISIONS.md`](delivery-docs/DECISIONS.md)。
-
-## 单一对话下单流程
-
-当前 AI 对话统一自动下单，有商品差异时展示差异与完整报价并等待用户接受。当前对话任务（包括中途确认）享有优惠 C；独立网页或短链提交不因此获得资格。运行前确保数据库已应用最终 `db/ddl.sql`（shopping_tasks 不含 mode 列）。详见 [`docs/v0.1-current/`](docs/v0.1-current/requirements-list.md)。
