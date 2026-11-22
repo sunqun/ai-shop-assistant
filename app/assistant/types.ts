@@ -30,7 +30,7 @@ export type AssistantResult = {
 
 export type ChatMessage = {
   taskId?: string;
-  taskEvent?: "cancellation";
+  taskEvent?: "cancellation" | "order";
   role: "assistant" | "user";
   text: string;
   result?: AssistantResult;

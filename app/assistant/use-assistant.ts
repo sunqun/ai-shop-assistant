@@ -86,12 +86,23 @@ export function useAssistant() {
         order: next.order,
       },
     };
-    // 普通任务进度原地更新；取消流程独立追加，后续进度/重试更新同一事件消息。
+    // 普通任务进度原地更新；订单与取消结果独立追加，后续刷新更新同一事件消息。
     setMessages((items) => {
       const index = items.findIndex((item) => item.taskId === next.taskId && !item.taskEvent);
       let updated = items;
-      // 已有商品报价保留在历史位置；恢复取消任务时才补回商品报价摘要。
-      if (!cancellation || (index < 0 && (next.product || next.quote)))
+      // 已有商品报价保留在历史位置；恢复终态任务时才补回商品报价摘要。
+      if (next.phase === "ordered") {
+        if (index < 0 && (next.product || next.quote))
+          updated = [...updated, {
+            ...message,
+            text: next.quote ? "本次购物商品与报价" : "本次购物商品信息",
+            result: {
+              ...message.result,
+              status: next.quote ? "ready_for_confirmation" : undefined,
+              order: undefined,
+            },
+          }];
+      } else if (!cancellation || (index < 0 && (next.product || next.quote)))
         updated = index < 0
           ? [...updated, message]
           : updated.map((item, position) => (position === index ? message : item));
@@ -101,6 +112,20 @@ export function useAssistant() {
           text: "已恢复当前商品最近一次评论分析。",
           reviewAnalysis: next.reviewAnalysis,
         }];
+      if (next.phase === "ordered") {
+        const event: ChatMessage = {
+          taskId: next.taskId,
+          taskEvent: "order",
+          role: "assistant",
+          text: SHOPPING_PHASE_LABELS[next.phase],
+          result: { status: "ordered", order: next.order },
+        };
+        const eventIndex = updated.findIndex((item) =>
+          item.taskId === next.taskId && item.taskEvent === "order");
+        updated = eventIndex < 0
+          ? [...updated, event]
+          : updated.map((item, position) => (position === eventIndex ? event : item));
+      }
       if (cancellation) {
         const event: ChatMessage = {
           taskId: next.taskId,
