@@ -57,6 +57,7 @@ type OrderListRow = RowDataPacket & {
   discount_minor: number | string;
   shipping_minor: number | string;
   total_minor: number | string;
+  promotion: string;
   order_id: string;
   sku_id: string;
   quantity: number;
@@ -68,6 +69,7 @@ export type UserOrderView = {
   orderGroupId: string;
   source: "WEB" | "AI";
   shoppingTaskId: string | null; // 已核对用户及幂等绑定的对话任务来源。
+  aiOrder: boolean; // 是否享受 C（AI 下单 95 折）优惠。
   createdAt: string;
   subtotalMinor: number;
   discountMinor: number;
@@ -168,7 +170,7 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
               WHERE og.source = 'AI' AND st.userid = og.userid
                 AND q.shopping_task_id = st.task_id
                 AND og.idempotency_key = CONCAT('shopping:', st.task_id, ':order') LIMIT 1) AS shopping_task_id,
-            q.subtotal_minor, q.discount_minor, q.shipping_minor, q.total_minor,
+            q.subtotal_minor, q.discount_minor, q.shipping_minor, q.total_minor, q.promotion,
             o.order_id, oi.sku_id, oi.quantity, oi.unit_price_minor,
             oi.product_name_snapshot AS product_name
        FROM order_groups og
@@ -188,6 +190,7 @@ async function readOrderViews(userid: string, orderGroupId?: string): Promise<Us
         orderGroupId: id,
         source: row.source,
         shoppingTaskId: row.shopping_task_id ?? null,
+        aiOrder: String(row.promotion).includes("C"),
         createdAt: dateValue(row.created_at).toISOString(),
         subtotalMinor: Number(row.subtotal_minor),
         discountMinor: Number(row.discount_minor),

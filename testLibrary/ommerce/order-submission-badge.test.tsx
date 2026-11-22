@@ -5,14 +5,14 @@ import type { UserOrderView } from "@/lib/repository/order-service";
 
 afterEach(cleanup);
 
-describe("订单对话任务标记", () => {
+describe("订单 AI 下单标记", () => {
   it.each([
-    ["AI", "conversation-task", "AI 下单"],
-    ["AI", null, "自主下单"],
-    ["WEB", null, "自主下单"],
-  ] as const)("计价来源%s、对话任务%s显示%s", (source, shoppingTaskId, label) => {
+    ["AI", true, "AI 下单"],
+    ["AI", false, "自主下单"],
+    ["WEB", false, "自主下单"],
+  ] as const)("计价来源%s、享受95折%s显示%s", (source, aiOrder, label) => {
     const order: UserOrderView = {
-      orderGroupId: "order-fixture", source, shoppingTaskId,
+      orderGroupId: "order-fixture", source, aiOrder, shoppingTaskId: null,
       createdAt: "2026-11-21T00:00:00Z", subtotalMinor: 10000,
       discountMinor: 500, shippingMinor: 0, totalMinor: 9500,
       items: [{ skuId: "sku", productName: "耳机", quantity: 1, unitPriceMinor: 10000 }],

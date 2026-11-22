@@ -17,8 +17,8 @@ export function OrderCard({
     <article className="order">
       <header className="order__head">
         <div className="order__source">
-          <span className={`order__badge${!!order.shoppingTaskId ? " order__badge--ai" : ""}`}>
-            {!!order.shoppingTaskId ? "AI 下单" : "自主下单"}
+          <span className={`order__badge${order.aiOrder ? " order__badge--ai" : ""}`}>
+            {order.aiOrder ? "AI 下单" : "自主下单"}
           </span>
           <span className="order__id">{order.orderGroupId}</span>
         </div>
